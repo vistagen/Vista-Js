@@ -45,7 +45,17 @@ We welcome contributions! Please see our [CONTRIBUTING.md](CONTRIBUTING.md) for 
 
 ## 📄 License
 
-MIT
+Vista is released under the **MIT License** — one of the most permissive open-source licenses available.
+
+**What this means for you:**
+- ✅ **Use it freely** — personal projects, commercial products, startups, enterprises
+- ✅ **Modify it** — fork it, customize it, make it your own
+- ✅ **Distribute it** — share your creations with the world
+- ✅ **No royalties, no fees** — completely free, forever
+
+The only requirement is to include the original copyright notice in any substantial portions of the software you distribute.
+
+See the full [LICENSE](LICENSE) file for details.
 
 ---
 
