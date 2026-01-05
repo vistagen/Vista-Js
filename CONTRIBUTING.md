@@ -1,92 +1,81 @@
 # Contributing to Vista
 
-Thank you for your interest in contributing to Vista! This document provides guidelines and instructions for contributing.
+Thank you for your interest in contributing to Vista! This is an alpha-stage framework, and we welcome your help to make it stable and feature-rich.
 
-## Development Setup
+## 🚨 IMPORTANT RULES
 
-### Prerequisites
+**Please follow these core rules strictly:**
 
-- Node.js 20+
-- pnpm 8+
-- Rust (stable toolchain)
+1.  **NEVER push directly to the `main` branch.**
+    *   The `main` branch is protected. Direct pushes will be rejected.
+2.  **Create your own branch** for every change.
+    *   Development happens on feature branches.
+3.  **One feature = One branch.**
+    *   Keep your changes focused. Don't bundle multiple features in one PR.
 
-### Getting Started
+---
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/your-org/vista.git
-   cd vista
-   ```
+## 🛠️ Development Workflow
 
-2. **Install dependencies**
-   ```bash
-   pnpm install
-   ```
+### 1. Fork & Clone
+Fork the repository to your own GitHub account, then clone it locally:
 
-3. **Build the Rust native bindings**
-   ```bash
-   cd crates/vista-napi
-   npm run build
-   cd ../..
-   ```
-
-4. **Build all packages**
-   ```bash
-   pnpm build
-   ```
-
-5. **Run the test app**
-   ```bash
-   cd test-app
-   npm run dev
-   ```
-
-## Project Structure
-
-```
-vista-source/
-├── crates/                 # Rust crates
-│   ├── vista-napi/        # N-API bindings for Node.js
-│   └── vista-transforms/  # SWC transforms
-├── packages/
-│   ├── vista/             # Core framework
-│   └── create-vista-app/  # CLI scaffolding tool
-└── test-app/              # Test application
+```bash
+git clone https://github.com/YOUR-USERNAME/Vista-Js.git
+cd Vista-Js
 ```
 
-## Code Style
+### 2. Create a Branch
+**Always** create a new branch from `main` before you start working:
 
-### TypeScript/JavaScript
-- We use Prettier for formatting
-- ESLint for linting
-- Run `pnpm lint` before committing
+```bash
+git checkout main
+git pull origin main
+git checkout -b feature/my-new-feature
+# or for fixes
+git checkout -b fix/bug-description
+```
 
-### Rust
-- Use `cargo fmt` for formatting
-- Use `cargo clippy` for linting
+### 3. Setup Environment
 
-## Pull Request Process
+*   **Node.js:** 20+
+*   **pnpm:** 8+
+*   **Rust:** Stable toolchain
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Run tests and linting
-5. Commit your changes (`git commit -m 'Add amazing feature'`)
-6. Push to the branch (`git push origin feature/amazing-feature`)
-7. Open a Pull Request
+```bash
+# Install dependencies
+pnpm install
 
-## Commit Messages
+# Build Rust bindings
+cd crates/vista-napi
+npm run build
+cd ../..
+```
 
-Follow the [Conventional Commits](https://www.conventionalcommits.org/) specification:
+### 4. Make Changes
+Write your code!
+*   **TypeScript/JS:** We use Prettier & ESLint. Run `pnpm lint` before committing.
+*   **Rust:** Use `cargo fmt` and `cargo clippy`.
 
-- `feat:` New features
-- `fix:` Bug fixes
-- `docs:` Documentation changes
-- `style:` Code style changes (formatting, etc.)
-- `refactor:` Code refactoring
-- `test:` Adding or updating tests
-- `chore:` Maintenance tasks
+### 5. Push & Pull Request
+Once you are happy with your changes:
 
-## Questions?
+```bash
+git add .
+git commit -m "feat: description of my awesome feature"
+git push origin feature/my-new-feature
+```
 
-Feel free to open an issue for any questions or concerns.
+Then, go to the GitHub repository and open a **Pull Request (PR)** targeting the `main` branch.
+
+---
+
+## 📂 Project Structure
+
+*   `crates/` - Rust core logic (N-API bindings, SWC transforms)
+*   `packages/` - JavaScript packages (`vista`, `create-vista-app`)
+*   `apps/` - Example and test applications
+
+## 💬 Community
+
+If you have questions, please open an issue or start a discussion. We appreciate your code, feedback, and support in building the future of React frameworks!
