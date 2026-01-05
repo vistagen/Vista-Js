@@ -7,6 +7,8 @@
     "start": "vista start"
   },
   "dependencies": {
+    "@react-three/drei": "^9.102.0",
+    "@react-three/fiber": "^9.0.0",
     "@swc-node/register": "^1.9.0",
     "@swc/core": "^1.4.0",
     "clsx": "^2.1.1",
