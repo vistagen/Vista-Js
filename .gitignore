@@ -1,6 +1,8 @@
 # Node
 node_modules/
+# Ignore dist except for packages/vista/dist (needed for Vercel)
 dist/
+!packages/vista/dist/
 build/
 .next/
 out/
