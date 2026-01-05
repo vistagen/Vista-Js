@@ -1,0 +1,26 @@
+{
+  "version": 2,
+  "buildCommand": "cd apps/web && npm install && npx vista build",
+  "outputDirectory": "apps/web/.vista",
+  "framework": null,
+  "installCommand": "npm install",
+  "devCommand": "cd apps/web && npm run dev",
+  "routes": [
+    {
+      "src": "/client.js",
+      "dest": "/apps/web/.vista/client.js"
+    },
+    {
+      "src": "/client.css",
+      "dest": "/apps/web/.vista/client.css"
+    },
+    {
+      "src": "/vista-client-manifest.js",
+      "dest": "/apps/web/.vista/vista-client-manifest.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/api/handler"
+    }
+  ]
+}
