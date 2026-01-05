@@ -1,0 +1,23 @@
+{
+  "name": "vista-web",
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "vista dev",
+    "build": "vista build",
+    "start": "vista start"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "vista": "file:../packages/vista"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "tailwindcss": "^4.0.0-alpha.0",
+    "postcss": "^8.0.0",
+    "postcss-cli": "^11.0.0",
+    "@tailwindcss/postcss": "^4.0.0-alpha.0"
+  }
+}
