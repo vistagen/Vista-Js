@@ -81,7 +81,7 @@ export function createWebpackConfig(options: WebpackConfigOptions): webpack.Conf
                     exclude: /node_modules/,
                     use: [
                         {
-                            loader: 'swc-loader',
+                            loader: require.resolve('swc-loader'),
                             options: {
                                 jsc: {
                                     parser: {

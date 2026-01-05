@@ -79,7 +79,7 @@ function createWebpackConfig(options) {
                     exclude: /node_modules/,
                     use: [
                         {
-                            loader: 'swc-loader',
+                            loader: require.resolve('swc-loader'),
                             options: {
                                 jsc: {
                                     parser: {
