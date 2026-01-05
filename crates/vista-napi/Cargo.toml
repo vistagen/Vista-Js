@@ -1,0 +1,30 @@
+[package]
+name = "vista-napi"
+version = "0.1.0"
+edition = "2021"
+description = "Node.js NAPI bindings for Vista Rust transforms"
+
+[lib]
+crate-type = ["cdylib"]
+
+[package.metadata.napi]
+name = "vista-native"
+triples = [
+    "x86_64-pc-windows-msvc",
+    "x86_64-apple-darwin",
+    "x86_64-unknown-linux-gnu",
+    "aarch64-apple-darwin",
+    "aarch64-unknown-linux-gnu"
+]
+
+[dependencies]
+vista-transforms = { path = "../vista-transforms" }
+napi = { workspace = true }
+napi-derive = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+walkdir = "2"
+
+
+[build-dependencies]
+napi-build = "2"

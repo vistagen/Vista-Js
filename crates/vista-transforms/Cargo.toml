@@ -1,0 +1,14 @@
+[package]
+name = "vista-transforms"
+version = "0.1.0"
+edition = "2021"
+description = "SWC transforms for Vista framework"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+rustc-hash = { workspace = true }
+
+[lib]
+crate-type = ["cdylib", "rlib"]

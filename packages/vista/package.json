@@ -1,0 +1,82 @@
+{
+  "name": "vista",
+  "version": "1.0.0",
+  "description": "The Vista SSR Framework",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./link": {
+      "types": "./dist/client/link.d.ts",
+      "default": "./dist/client/link.js"
+    },
+    "./image": {
+      "types": "./dist/image/index.d.ts",
+      "default": "./dist/image/index.js"
+    },
+    "./router": {
+      "types": "./dist/client/router.d.ts",
+      "default": "./dist/client/router.js"
+    },
+    "./navigation": {
+      "types": "./dist/client/navigation.d.ts",
+      "default": "./dist/client/navigation.js"
+    },
+    "./dynamic": {
+      "types": "./dist/client/dynamic.d.ts",
+      "default": "./dist/client/dynamic.js"
+    },
+    "./script": {
+      "types": "./dist/client/script.d.ts",
+      "default": "./dist/client/script.js"
+    },
+    "./font": {
+      "types": "./dist/client/font.d.ts",
+      "default": "./dist/client/font.js"
+    },
+    "./head": {
+      "types": "./dist/client/head.d.ts",
+      "default": "./dist/client/head.js"
+    },
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "default": "./dist/config.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "vista": "./bin/vista.js"
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "esbuild": "^0.24.2",
+    "express": "^4.21.2",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "ts-node": "^10.9.2",
+    "webpack": "^5.90.0",
+    "webpack-dev-middleware": "^7.0.0",
+    "webpack-hot-middleware": "^2.26.0",
+    "swc-loader": "^0.2.6",
+    "@swc/core": "^1.4.0",
+    "@swc-node/register": "^1.9.0",
+    "@pmmmwh/react-refresh-webpack-plugin": "^0.5.11",
+    "react-refresh": "^0.14.0",
+    "null-loader": "^4.0.1",
+    "chokidar": "^3.6.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.1",
+    "@types/react-dom": "^19.0.2",
+    "@types/webpack": "^5.28.5",
+    "@types/webpack-hot-middleware": "^2.25.9",
+    "typescript": "^5.7.2"
+  }
+}

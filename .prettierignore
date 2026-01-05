@@ -1,0 +1,36 @@
+# Prettier Ignore
+# Files and directories to skip when formatting
+
+# Build outputs
+node_modules/
+dist/
+.vista/
+.next/
+out/
+
+# Rust build artifacts
+target/
+*.node
+
+# Lock files
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+Cargo.lock
+
+# Generated files
+*.d.ts
+*.min.js
+*.min.css
+
+# Test fixtures
+test-app/
+examples/
+
+# IDE
+.idea/
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db

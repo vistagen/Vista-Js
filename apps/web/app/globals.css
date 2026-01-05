@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* Prevent layout shifts during hydration */
+html {
+  overflow-y: scroll; /* Always show scrollbar to prevent layout shift */
+}
+
+/* Ensure smooth scroll behavior is handled by CSS when Lenis isn't loaded yet */
+html.lenis, html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+.lenis.lenis-smooth iframe {
+  pointer-events: none;
+}
+
+/* Default to dark mode to prevent FOUC (flash of white) */
+:root {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  --primary: #ff4c30;
+  color-scheme: dark;
+}
+
+/* Light mode when explicitly set */
+:root.light {
+  --background: #ffffff;
+  --foreground: #171717;
+  --primary: #ff4c30;
+  color-scheme: light;
+}
+
+/* Dark mode explicit class */
+:root.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  --primary: #ff4c30;
+  color-scheme: dark;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Custom Utilities for Glass effects */
+.glass {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.text-gradient {
+  background: linear-gradient(to right, var(--primary), #ff8c00);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
