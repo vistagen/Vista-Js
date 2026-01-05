@@ -1,9 +1,9 @@
 {
   "version": 2,
-  "buildCommand": "cd apps/web && npm install && npx vista build",
+  "buildCommand": "cd apps/web && npm install --legacy-peer-deps && npx vista build",
   "outputDirectory": "apps/web/.vista",
   "framework": null,
-  "installCommand": "npm install",
+  "installCommand": "npm install --legacy-peer-deps",
   "devCommand": "cd apps/web && npm run dev",
   "routes": [
     {
