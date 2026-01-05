@@ -39,7 +39,7 @@ copyRecursiveSync(templateDir, projectDir);
 
 console.log('Scaffolding complete.');
 
-// 3. Setup Dependencies
+// 3. Setup Dependencies (production-ready)
 const packageJson = {
   name: projectName,
   version: '0.1.0',
@@ -49,18 +49,24 @@ const packageJson = {
     "start": "vista start"
   },
   dependencies: {
+    // Runtime dependencies
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "vista": "file:../packages/vista" 
+    "@vistagenic/vista": "^0.1.0-alpha.2",
+    // CSS build (needed in production for vista build)
+    "postcss": "^8.0.0",
+    "postcss-cli": "^11.0.0",
+    "tailwindcss": "^4.0.0-alpha.0",
+    "@tailwindcss/postcss": "^4.0.0-alpha.0",
+    // Node 20+ SSR compatibility
+    "@swc-node/register": "^1.9.0",
+    "@swc/core": "^1.4.0",
+    "tsx": "^4.7.0"
   },
   devDependencies: {
-      "typescript": "^5.0.0",
-      "@types/react": "^19.0.0",
-      "@types/react-dom": "^19.0.0",
-      "tailwindcss": "^4.0.0-alpha.0", 
-      "postcss": "^8.0.0",
-      "postcss-cli": "^11.0.0",
-      "@tailwindcss/postcss": "^4.0.0-alpha.0"
+    "typescript": "^5.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0"
   }
 };
 
