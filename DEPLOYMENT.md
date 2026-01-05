@@ -1,81 +1,59 @@
-# Deploying Vista to Vercel
+# Deploying Vista to Render
 
-> ⚠️ **Note:** Vista is in alpha. Vercel deployment support is experimental.
+Render is the recommended platform for Vista since it supports **long-running Node.js servers**.
 
-## Prerequisites
+## Quick Deploy (Recommended)
 
-1. A [Vercel](https://vercel.com) account
-2. [Vercel CLI](https://vercel.com/docs/cli) installed: `npm i -g vercel`
+1. **Go to [render.com/new](https://dashboard.render.com/new)**
 
-## Deployment Steps
+2. **Select "Blueprint"** and connect your GitHub repo (`vistagen/Vista-Js`)
 
-### Option 1: Deploy via Vercel Dashboard (Recommended)
+3. **Render will auto-detect `render.yaml`** and configure everything
 
-1. **Push your code to GitHub** (already done at `vistagen/Vista-Js`)
+4. **Click "Apply"** - Done! 🚀
 
-2. **Import Project in Vercel:**
-   - Go to [vercel.com/new](https://vercel.com/new)
-   - Click **"Import Git Repository"**
-   - Select the `vistagen/Vista-Js` repository
+---
 
-3. **Configure Build Settings:**
-   - **Framework Preset:** `Other`
-   - **Root Directory:** `./` (monorepo root)
-   - **Build Command:** `cd apps/web && npm install && npx vista build`
-   - **Output Directory:** `apps/web/.vista`
-   - **Install Command:** `npm install`
+## Manual Setup
 
-4. **Deploy!**
-   - Click **Deploy**
-   - Vercel will build and deploy your app
+If you prefer manual configuration:
 
-### Option 2: Deploy via Vercel CLI
+1. **Go to [render.com/new](https://dashboard.render.com/new)**
 
-```bash
-# From the vista-source root directory
-cd d:/Frame-Work Tarkari/vista-source
+2. **Select "Web Service"**
 
-# Login to Vercel (first time only)
-vercel login
+3. **Connect your GitHub repo** (`vistagen/Vista-Js`)
 
-# Deploy
-vercel
+4. **Configure:**
+   - **Name:** `vista-web`
+   - **Region:** Oregon (or closest to you)
+   - **Runtime:** Node
+   - **Build Command:**
+     ```
+     cd packages/vista && npm install --legacy-peer-deps && cd ../../apps/web && npm install --legacy-peer-deps && npx vista build
+     ```
+   - **Start Command:**
+     ```
+     cd apps/web && npx vista start
+     ```
+   - **Instance Type:** Free (or paid for production)
 
-# Follow the prompts:
-# - Set up and deploy: Y
-# - Scope: Select your account
-# - Link to existing project: N (for first deploy)
-# - Project name: vista-web (or your choice)
-# - Directory: ./
-# - Override settings: N (uses vercel.json)
+5. **Environment Variables:**
+   - `NODE_ENV` = `production`
+   - `PORT` = `3003`
+
+6. **Click "Create Web Service"**
+
+---
+
+## After Deployment
+
+Your app will be available at:
+```
+https://vista-web-xxxx.onrender.com
 ```
 
-## Important Notes
-
-### Rust Native Bindings
-Vista uses Rust (N-API) for performance. Vercel's build environment supports Linux x64. The `vista-napi` crate is configured to build for `x86_64-unknown-linux-gnu`.
-
-If you encounter build failures related to Rust:
-1. Ensure `rust-toolchain.toml` is present
-2. The build may take longer on first deploy (Rust compilation)
-
-### Environment Variables
-Set any required environment variables in Vercel Dashboard:
-- `NODE_ENV=production`
-
-### Static Files
-Static assets from `apps/web/public/` are served from the `.vista` output directory.
-
-## Troubleshooting
-
-**Build fails with "vista not found":**
-- Ensure `packages/vista` is built first
-- The build command should handle this automatically
-
-**Page not rendering:**
-- Check Vercel function logs in the dashboard
-- Ensure all dependencies are installed
-
-**CSS not loading:**
-- Verify `client.css` is generated in `.vista/`
-- Check the routes in `vercel.json`
+Render automatically:
+- Redeploys on every push to `main`
+- Provides free SSL
+- Shows logs in the dashboard
