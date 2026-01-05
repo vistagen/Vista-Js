@@ -18,12 +18,15 @@ require.extensions['.css'] = () => {};
 
 // Use SWC for faster server-side TypeScript compilation
 try {
-    require('@swc-node/register');
+    // Try to resolve from project's node_modules first (where apps install their deps)
+    const swcPath = require.resolve('@swc-node/register', { paths: [process.cwd()] });
+    require(swcPath);
     console.log("Using SWC for server-side TypeScript compilation (Rust-powered)");
 } catch (e) {
     // Fallback to ts-node if @swc-node not available
     try {
-        require('ts-node').register({
+        const tsNodePath = require.resolve('ts-node', { paths: [process.cwd()] });
+        require(tsNodePath).register({
             transpileOnly: true,
             compilerOptions: {
                 module: 'commonjs',
