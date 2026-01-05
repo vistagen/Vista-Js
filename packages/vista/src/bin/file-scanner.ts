@@ -65,7 +65,53 @@ export function getRouteTree(appDir: string): RouteNode {
   if (rustNative && rustNative.getRouteTree) {
     return rustNative.getRouteTree(appDir);
   }
-  throw new Error('Vista Rust bindings not loaded. Cannot generate route tree.');
+  // JS Fallback - build route tree from file system
+  return buildRouteTreeJS(appDir, appDir);
+}
+
+/**
+ * JS Fallback for building route tree when Rust bindings are unavailable
+ */
+function buildRouteTreeJS(dir: string, appDir: string): RouteNode {
+  const segment = dir === appDir ? '' : path.basename(dir);
+  const node: RouteNode = {
+    segment,
+    kind: segment.startsWith('[...') ? 'catch-all' : segment.startsWith('[') ? 'dynamic' : 'static',
+    children: [],
+  };
+
+  if (!fs.existsSync(dir)) {
+    return node;
+  }
+
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+
+    if (entry.isDirectory()) {
+      if (!entry.name.startsWith('.') && entry.name !== 'node_modules') {
+        node.children.push(buildRouteTreeJS(fullPath, appDir));
+      }
+    } else if (entry.isFile()) {
+      const basename = path.basename(entry.name, path.extname(entry.name));
+      const relativePath = path.relative(appDir, fullPath);
+
+      if (basename === 'index' || basename === 'page') {
+        node.indexPath = relativePath;
+      } else if (basename === 'layout' || basename === 'root') {
+        node.layoutPath = relativePath;
+      } else if (basename === 'loading') {
+        node.loadingPath = relativePath;
+      } else if (basename === 'error') {
+        node.errorPath = relativePath;
+      } else if (basename === 'not-found') {
+        node.notFoundPath = relativePath;
+      }
+    }
+  }
+
+  return node;
 }
 
 export interface ClientDirectiveInfo {
