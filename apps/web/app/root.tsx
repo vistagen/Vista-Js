@@ -1,7 +1,6 @@
 import "./globals.css";
 import { Metadata, Client } from 'vista';
 import Navbar from '@/components/Navbar';
-import SmoothScroll from '@/components/SmoothScroll';
 
 // Metadata export (optional)
 export const metadata: Metadata = {
@@ -16,7 +15,6 @@ export default function RootLayout({
 }>) {
     return (
         <>
-            <Client><SmoothScroll /></Client>
             <Client><Navbar /></Client>
             {children}
         </>

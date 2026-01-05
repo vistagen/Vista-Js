@@ -5,36 +5,12 @@ import { siteConfig } from '../data/site';
 
 export default function Navbar() {
     const [isScrolled, setIsScrolled] = useState(false);
-    const [stars, setStars] = useState<string | number>(0);
 
     useEffect(() => {
         const handleScroll = () => {
             setIsScrolled(window.scrollY > 20);
         };
         window.addEventListener('scroll', handleScroll);
-
-        // Fetch GitHub Stars
-        const fetchStars = async () => {
-            try {
-                // Extract owner/repo from url: https://github.com/owner/repo
-                const url = new URL(siteConfig.links.github);
-                const pathParts = url.pathname.split('/').filter(Boolean);
-                if (pathParts.length >= 2) {
-                    const owner = pathParts[0];
-                    const repo = pathParts[1];
-                    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`);
-                    const data = await res.json();
-                    if (data.stargazers_count) {
-                        setStars(data.stargazers_count);
-                    }
-                }
-            } catch (error) {
-                console.error('Failed to fetch stars:', error);
-            }
-        };
-
-        fetchStars();
-
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
 
@@ -47,7 +23,6 @@ export default function Navbar() {
         >
             <div className="max-w-7xl mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
                 <a href="/" className="flex items-center gap-2">
-                    {/* Use regular img for logo - instant load, no hydration flash */}
                     <img
                         src="/vista.svg"
                         width={120}
@@ -77,10 +52,8 @@ export default function Navbar() {
                         rel="noopener noreferrer"
                         className="flex items-center gap-2 px-4 py-2 rounded-full border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors text-sm font-medium text-black dark:text-white group"
                     >
-                        <Github className="w-4 h-4 text-zinc-600 dark:text-zinc-400 group-hover:text-black dark:group-hover:text-white transition-colors" />
+                        <Github className="w-4 h-4" />
                         <span className="hidden md:inline">Star on GitHub</span>
-                        <div className="hidden md:block w-[1px] h-4 bg-black/10 dark:bg-white/10 mx-2" />
-                        <span className="hidden md:inline text-zinc-600 dark:text-zinc-400 group-hover:text-black dark:group-hover:text-white transition-colors font-mono">{stars}</span>
                     </a>
                 </div>
             </div>
