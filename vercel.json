@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "cd apps/web && npm install --legacy-peer-deps && npx vista build",
+  "buildCommand": "cd packages/vista && npm install --legacy-peer-deps && cd ../../apps/web && npm install --legacy-peer-deps && npx vista build",
   "outputDirectory": "apps/web/.vista",
   "framework": null,
   "installCommand": "npm install --legacy-peer-deps",
