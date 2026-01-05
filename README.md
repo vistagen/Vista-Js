@@ -49,4 +49,20 @@ MIT
 
 ---
 
-*Built with ❤️ by the Vista Team*
+## 💫 A Note to Young Developers
+
+**You are not too young. You are not too inexperienced. You are exactly where you need to be.**
+
+The greatest technologies were not built by those who waited for permission—they were built by those who dared to begin. Every framework you use today was once just an idea in someone's mind, just like the ideas in yours right now.
+
+Vista exists because we believe the next revolution in web development won't come from big corporations—it will come from *you*. From late nights of curiosity. From that stubborn refusal to accept "that's just how it's done."
+
+So build. Break things. Learn. And most importantly—**ship your ideas into the world**.
+
+The future of the web is being written today. Make sure your code is part of that story.
+
+---
+
+*Built with passion, curiosity, and an unreasonable belief in what's possible.*
+
+**[Ankan Dalui](https://www.linkedin.com/in/ankan-dalui)** — *Founder, Vista.js*
