@@ -606,58 +606,22 @@ function renderApp(req: any, res: any, PageComponent: any, RootComponent: any, p
     
     // Blocking script that runs immediately to set theme class
     // This runs before any CSS loads, preventing flash
-    // Also sets up atomic theme switching after page load (next-themes style)
+    // Vista defaults to DARK MODE ONLY - no system preference check
     const themeScript = `
         (function() {
             var d = document.documentElement;
             
-            // Immediately set theme before paint
-            var theme = localStorage.getItem('vista-theme');
-            var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            var effectiveTheme = theme === 'light' ? 'light' : (theme === 'dark' ? 'dark' : (prefersDark ? 'dark' : 'light'));
+            // Always use dark mode - Vista is dark-first
+            d.classList.add('dark');
+            d.classList.remove('light');
+            d.style.colorScheme = 'dark';
             
-            d.classList.add(effectiveTheme);
-            d.classList.remove(effectiveTheme === 'dark' ? 'light' : 'dark');
-            d.style.colorScheme = effectiveTheme;
-            
-            // Global theme setter for components to use (next-themes style)
-            // Uses temporary stylesheet to disable ALL transitions during switch
+            // Global theme setter (kept for future use)
             window.__vistaSetTheme = function(newTheme) {
-                // Create a temporary style element to disable all transitions
-                var css = document.createElement('style');
-                css.appendChild(document.createTextNode(
-                    '*,*::before,*::after{-webkit-transition:none!important;-moz-transition:none!important;-o-transition:none!important;-ms-transition:none!important;transition:none!important}'
-                ));
-                document.head.appendChild(css);
-                
-                // Apply theme classes
                 d.classList.remove('light', 'dark');
                 d.classList.add(newTheme);
                 d.style.colorScheme = newTheme;
-                
-                // Save to localStorage
-                localStorage.setItem('vista-theme', newTheme);
-                
-                // Force a reflow to ensure the transition-blocking style is applied
-                // before we remove it. getComputedStyle forces a synchronous layout.
-                window.getComputedStyle(css).opacity;
-                
-                // Remove the transition-blocking style on next frame
-                // This ensures all theme changes have been applied
-                requestAnimationFrame(function() {
-                    requestAnimationFrame(function() {
-                        document.head.removeChild(css);
-                    });
-                });
             };
-            
-            // Listen for system preference changes
-            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(e) {
-                var currentTheme = localStorage.getItem('vista-theme');
-                if (!currentTheme || currentTheme === 'system') {
-                    window.__vistaSetTheme(e.matches ? 'dark' : 'light');
-                }
-            });
         })();
     `;
     
