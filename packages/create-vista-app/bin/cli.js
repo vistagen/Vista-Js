@@ -52,7 +52,7 @@ const packageJson = {
     // Runtime dependencies
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "@vistagenic/vista": "^0.1.0-alpha.2",
+    "@vistagenic/vista": "^0.1.0-alpha.3",
     // CSS build (needed in production for vista build)
     "postcss": "^8.0.0",
     "postcss-cli": "^11.0.0",
