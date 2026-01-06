@@ -1,5 +1,4 @@
 import * as React from 'react';
-import Image from 'vista/image';
 
 export default function Index() {
     return (
@@ -7,13 +6,12 @@ export default function Index() {
             <div className="-mt-20 mb-10 relative border border-dashed border-gray-300 dark:border-neutral-700 p-10">
                 <div className="absolute -top-0 -left-0 -translate-x-1/2 -translate-y-1/2 w-24 h-24 border border-dashed border-gray-300 dark:border-neutral-700 rounded-full" />
                 <div className="absolute -bottom-0 -right-0 translate-x-1/2 translate-y-1/2 w-24 h-24 border border-dashed border-gray-300 dark:border-neutral-700 rounded-full" />
-                <Image
+                <img
                     src="/vista.svg"
                     alt="Vista Logo"
                     width={600}
                     height={600}
                     className="dark:invert"
-                    priority
                 />
             </div>
 
