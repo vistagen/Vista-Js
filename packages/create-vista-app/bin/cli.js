@@ -52,7 +52,7 @@ const packageJson = {
     // Runtime dependencies
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "@vistagenic/vista": "^0.1.0-alpha.3",
+    "@vistagenic/vista": "^0.1.0-alpha.4",
     // CSS build (needed in production for vista build)
     "postcss": "^8.0.0",
     "postcss-cli": "^11.0.0",
@@ -151,12 +151,22 @@ try {
     console.log('Note: Could not initialize git repository. You can do this manually with: git init');
 }
 
-console.log(`
-Success! Created ${projectName} at ${projectDir}
-Inside that directory, you can run:
+// 6. Install Dependencies
+console.log('\\nInstalling dependencies... This may take a moment.\\n');
+try {
+    execSync('npm install', { cwd: projectDir, stdio: 'inherit' });
+    console.log('\\n✓ Dependencies installed successfully!');
+} catch (e) {
+    console.log('\\nNote: Could not install dependencies automatically. Run "npm install" manually.');
+}
 
-  npm install
+console.log(`
+✨ Success! Created ${projectName} at ${projectDir}
+
+Get started by running:
+
+  cd ${projectName}
   npm run dev
 
-Happy Hacking!
+Happy Hacking! 🚀
 `);
