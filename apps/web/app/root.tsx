@@ -1,6 +1,7 @@
 import "./globals.css";
 import { Metadata, Client } from 'vista';
 import Navbar from '@/components/Navbar';
+import Footer from '@/components/Footer';
 
 // Metadata export (optional)
 export const metadata: Metadata = {
@@ -14,9 +15,12 @@ export default function RootLayout({
     children: React.ReactNode;
 }>) {
     return (
-        <>
+        <div className="min-h-screen flex flex-col bg-black text-zinc-100">
             <Client><Navbar /></Client>
-            {children}
-        </>
+            <main className="flex-grow">
+                {children}
+            </main>
+            <Footer />
+        </div>
     );
 }
