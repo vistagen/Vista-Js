@@ -1,3 +1,4 @@
+import Image from 'vista/image';
 import { docsContent } from '../../data/docs';
 
 export default function Docs() {
@@ -59,24 +60,16 @@ export default function Docs() {
                         </p>
                     </div>
 
-                    {/* Founder Signature */}
-                    <div className="mt-10 flex items-center gap-4">
+                    <div className="mt-10 flex flex-col items-start">
                         <img
-                            src="/signature.png"
+                            src="/signature.svg"
                             alt="Ankan Dalui Signature"
-                            className="h-12 opacity-80 invert"
+                            width={350}
+                            height={120}
+                            className="opacity-80 invert mb-2"
+                            style={{ marginLeft: '-60px' }}
                         />
-                        <div>
-                            <a
-                                href="https://www.linkedin.com/in/ankan-dalui"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-zinc-300 hover:text-white transition-colors font-medium no-underline"
-                            >
-                                Ankan Dalui
-                            </a>
-                            <p className="text-zinc-500 text-sm">Founder, Vista.js</p>
-                        </div>
+                        <p className="text-zinc-500 text-lg font-medium -mt-2">Ankan Dalui, Founder, Vista.js</p>
                     </div>
                 </div>
             </div>

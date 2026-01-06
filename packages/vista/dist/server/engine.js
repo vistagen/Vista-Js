@@ -617,8 +617,8 @@ function renderApp(req, res, PageComponent, RootComponent, props, metadata, conf
         transform(chunk, encoding, callback) {
             let chunkString = chunk.toString();
             if (chunkString.includes('</head>')) {
-                // Inject metadata + CSS
-                const headInjection = `${metadataHtml}<link rel="stylesheet" href="/client.css">`;
+                // Inject metadata + CSS + Charset
+                const headInjection = `<meta charset="utf-8" />${metadataHtml}<link rel="stylesheet" href="/client.css">`;
                 chunkString = chunkString.replace('</head>', `${headInjection}</head>`);
             }
             if (chunkString.includes('</body>')) {
@@ -639,7 +639,7 @@ function renderApp(req, res, PageComponent, RootComponent, props, metadata, conf
     const stream = (0, server_1.renderToPipeableStream)(appElement, {
         onShellReady() {
             res.statusCode = didError ? 500 : status;
-            res.setHeader('Content-type', 'text/html');
+            res.setHeader('Content-type', 'text/html; charset=utf-8');
             stream.pipe(injectStream).pipe(res);
         },
         onShellError(err) {

@@ -27,9 +27,6 @@ export default function Index() {
 
             {/* Features Section */}
             <Client><Features /></Client>
-
-            {/* Interactive Dot Footer */}
-            <Client><Footer /></Client>
         </main>
     );
 }
