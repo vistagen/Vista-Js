@@ -21,7 +21,7 @@ Thank you for your interest in contributing to Vista! This is an alpha-stage fra
 Fork the repository to your own GitHub account, then clone it locally:
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/Vista-Js.git
+git clone https://github.com/vistagen/Vista-Js.git
 cd Vista-Js
 ```
 
