@@ -2,7 +2,7 @@ use napi_derive::napi;
 use vista_transforms::{detect_client_directive_fast, has_client_directive};
 use std::path::Path;
 
-/// Check if source code contains 'client load' directive
+/// Check if source code contains 'use client' directive
 #[napi]
 pub fn is_client_component(source: String) -> bool {
     has_client_directive(&source)
@@ -56,7 +56,12 @@ fn build_route_node(dir_path: &Path, base_path: &Path) -> RouteNode {
         kind = "group".to_string();
         segment = "".to_string(); // Groups don't add to the path
     }
-    // Handle dynamic routes [slug]
+    // Handle optional catch-all routes [[...slug]]
+    else if segment.starts_with("[[...") && segment.ends_with("]]") {
+        kind = "optional-catch-all".to_string();
+        segment = segment[5..segment.len()-2].to_string();
+    }
+    // Handle dynamic routes [slug] and catch-all [...slug]
     else if segment.starts_with('[') && segment.ends_with(']') {
         if segment.starts_with("[...") {
             kind = "catch-all".to_string();
@@ -87,7 +92,7 @@ fn build_route_node(dir_path: &Path, base_path: &Path) -> RouteNode {
             
             if path.is_dir() {
                 // Skip hidden folders and node_modules
-                if !file_name.starts_with('.') && file_name != "node_modules" {
+                if !file_name.starts_with('.') && file_name != "node_modules" && file_name != "[not-found]" {
                     let child_node = build_route_node(&path, base_path);
                     // Only add child if it has some content or children
                     if child_node.index_path.is_some() || child_node.layout_path.is_some() || !child_node.children.is_empty() {
@@ -409,7 +414,7 @@ mod tests {
 
     #[test]
     fn test_is_client() {
-        assert!(is_client_component("'client load';\n".to_string()));
+        assert!(is_client_component("'use client';\n".to_string()));
         assert!(!is_client_component("export default function() {}".to_string()));
     }
 }

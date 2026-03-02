@@ -22,7 +22,7 @@ export interface AppRouterInstance {
 }
 interface RouteNode {
     segment: string;
-    kind: 'static' | 'dynamic' | 'catch-all';
+    kind: 'static' | 'dynamic' | 'catch-all' | 'optional-catch-all' | 'group';
     index?: React.ComponentType<any>;
     layout?: React.ComponentType<any>;
     loading?: React.ComponentType<any>;

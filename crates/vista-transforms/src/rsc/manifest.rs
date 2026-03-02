@@ -120,6 +120,12 @@ fn generate_module_id(relative_path: &str, is_client: bool) -> String {
     }
 }
 
+fn is_reserved_internal_route(relative_path: &str) -> bool {
+    relative_path
+        .split(['/', '\\'])
+        .any(|segment| segment == "[not-found]")
+}
+
 /// Build URL pattern from relative path
 fn build_url_pattern(relative_path: &str) -> (String, String) {
     let mut pattern = String::from("/");
@@ -143,8 +149,14 @@ fn build_url_pattern(relative_path: &str) -> (String, String) {
             continue;
         }
         
+        // Optional catch-all segment [[...slug]]
+        if segment.starts_with("[[...") && segment.ends_with("]]") {
+            let param_name = &segment[5..segment.len()-2];
+            pattern.push_str(&format!(":{param_name}*?"));
+            route_type = "optional-catch-all".to_string();
+        }
         // Catch-all segment
-        if segment.starts_with("[...") && segment.ends_with(']') {
+        else if segment.starts_with("[...") && segment.ends_with(']') {
             let param_name = &segment[4..segment.len()-1];
             pattern.push_str(&format!(":{param_name}*"));
             route_type = "catch-all".to_string();
@@ -153,7 +165,7 @@ fn build_url_pattern(relative_path: &str) -> (String, String) {
         else if segment.starts_with('[') && segment.ends_with(']') {
             let param_name = &segment[1..segment.len()-1];
             pattern.push_str(&format!(":{param_name}"));
-            if route_type != "catch-all" {
+            if route_type != "catch-all" && route_type != "optional-catch-all" {
                 route_type = "dynamic".to_string();
             }
         }
@@ -246,6 +258,10 @@ pub fn generate_server_manifest(
     
     // Build routes from pages
     for page in &scan_result.pages {
+        if is_reserved_internal_route(&page.relative_path) {
+            continue;
+        }
+
         let (pattern, route_type) = build_url_pattern(&page.relative_path);
         
         // Find layouts for this route
@@ -318,5 +334,11 @@ mod tests {
     fn test_generate_chunk_name() {
         assert_eq!(generate_chunk_name("components/Button.tsx"), "components_button");
         assert_eq!(generate_chunk_name("app/blog/[slug]/page.tsx"), "app_blog__slug__page");
+    }
+
+    #[test]
+    fn test_reserved_internal_route_detection() {
+        assert!(is_reserved_internal_route("docs/[not-found]/page.tsx"));
+        assert!(!is_reserved_internal_route("docs/[slug]/page.tsx"));
     }
 }

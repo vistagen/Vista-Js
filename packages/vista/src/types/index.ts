@@ -1,4 +1,1 @@
-export interface Metadata {
-  title?: string;
-  description?: string;
-}
+export type { Metadata } from '../metadata/types';

@@ -5,7 +5,7 @@
  * Similar to Next.js dynamic.
  */
 
-'client load';
+'use client';
 
 import * as React from 'react';
 

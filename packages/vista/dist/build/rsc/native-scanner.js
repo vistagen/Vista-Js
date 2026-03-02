@@ -38,11 +38,13 @@ function loadNativeModule() {
         // Try @aspect-build/vista-napi as npm package
         '@aspect-build/vista-napi',
     ];
+    const _debug = !!process.env.VISTA_DEBUG;
     for (const modulePath of possiblePaths) {
         try {
             // eslint-disable-next-line @typescript-eslint/no-require-imports
             nativeModule = require(modulePath);
-            console.log('[Vista RSC] Using Rust-powered scanner');
+            if (_debug)
+                console.log('[Vista JS RSC] Using Rust-powered scanner');
             return nativeModule;
         }
         catch {
@@ -50,7 +52,8 @@ function loadNativeModule() {
         }
     }
     nativeLoadError = new Error('Native module not found');
-    console.warn('⚠ Native module unavailable, using TypeScript fallback');
+    if (_debug)
+        console.warn('⚠ Native module unavailable, using TypeScript fallback');
     return null;
 }
 /**
@@ -71,7 +74,9 @@ function scanAppNative(appDir) {
         const startTime = performance.now();
         const result = native.rscScanApp(appDir);
         const scanTime = performance.now() - startTime;
-        console.log(`🦀 Native scan completed in ${scanTime.toFixed(2)}ms (${result.totalFiles} files)`);
+        if (process.env.VISTA_DEBUG) {
+            console.log(`🦀 Native scan completed in ${scanTime.toFixed(2)}ms (${result.totalFiles} files)`);
+        }
         return result;
     }
     catch (e) {

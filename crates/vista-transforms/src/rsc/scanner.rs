@@ -41,7 +41,7 @@ pub struct ScannedComponent {
     pub absolute_path: String,
     /// Path relative to app directory
     pub relative_path: String,
-    /// Is this a client component (has 'client load' directive)
+    /// Is this a client component (has 'use client' directive)
     pub is_client: bool,
     /// Line number of the directive (0 if not client)
     pub directive_line: usize,
@@ -80,7 +80,7 @@ pub struct ScanResult {
     pub scan_time_ms: u64,
 }
 
-/// Client-only hooks that require 'client load' directive
+/// Client-only hooks that require 'use client' directive
 const CLIENT_HOOKS: &[&str] = &[
     "useState", "useEffect", "useLayoutEffect", "useReducer", "useRef",
     "useImperativeHandle", "useCallback", "useMemo", "useContext",
@@ -176,6 +176,12 @@ fn has_generate_metadata(source: &str) -> bool {
     source.contains("export const generateMetadata")
 }
 
+fn is_reserved_internal_route(relative_path: &str) -> bool {
+    relative_path
+        .split(['/', '\\'])
+        .any(|segment| segment == "[not-found]")
+}
+
 /// Scan a single file
 fn scan_file(path: &Path, app_dir: &Path) -> Option<ScannedComponent> {
     let source = fs::read_to_string(path).ok()?;
@@ -190,7 +196,7 @@ fn scan_file(path: &Path, app_dir: &Path) -> Option<ScannedComponent> {
             .enumerate()
             .find(|(_, line)| {
                 let trimmed = line.trim();
-                trimmed.starts_with("'client load'") || trimmed.starts_with("\"client load\"")
+                trimmed.starts_with("'use client'") || trimmed.starts_with("\"use client\"")
             })
             .map(|(i, _)| i + 1)
             .unwrap_or(1)
@@ -245,7 +251,7 @@ fn scan_directory_recursive(
                     errors.push(ServerComponentError {
                         file: component.relative_path.clone(),
                         message: format!(
-                            "Using {} in a Server Component. Add 'client load' to make it a Client Component.",
+                            "Using {} in a Server Component. Add 'use client' to make it a Client Component.",
                             component.client_hooks_used.join(", ")
                         ),
                         hooks: component.client_hooks_used.clone(),
@@ -282,7 +288,7 @@ pub fn scan_app_directory(app_dir: &str) -> ScanResult {
         .collect();
     
     let pages: Vec<_> = components.iter()
-        .filter(|c| c.component_type == ComponentType::Page)
+        .filter(|c| c.component_type == ComponentType::Page && !is_reserved_internal_route(&c.relative_path))
         .cloned()
         .collect();
     
@@ -352,5 +358,11 @@ mod tests {
         assert_eq!(ComponentType::from_filename("layout"), ComponentType::Layout);
         assert_eq!(ComponentType::from_filename("loading"), ComponentType::Loading);
         assert_eq!(ComponentType::from_filename("Button"), ComponentType::Component);
+    }
+
+    #[test]
+    fn test_reserved_internal_route_detection() {
+        assert!(is_reserved_internal_route("docs/[not-found]/page.tsx"));
+        assert!(!is_reserved_internal_route("docs/[slug]/page.tsx"));
     }
 }

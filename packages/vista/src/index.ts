@@ -19,7 +19,7 @@ export { default as Head, generateMetadataHead } from './client/head';
 export type { Metadata as HeadMetadata } from './client/head';
 
 // Font exports
-export * from './client/font';
+export * from './font/index';
 
 // Metadata exports (Next.js compatible)
 export * from './metadata';
@@ -27,11 +27,11 @@ export type { Metadata } from './metadata/types';
 
 // RSC (React Server Components) exports
 export { hydrateClientComponents, initializeHydration } from './client/hydration';
-export { ClientIsland } from './components/client-island';
 export { Client } from './components/client';
-
+export { RSCRouter, RSCRouterContext, useRSCRouter } from './client/rsc-router';
+export type { RSCRouterProps, RSCNavigationState, NavigationOptions } from './client/rsc-router';
+export { callServer } from './client/server-actions';
 
 // Build system exports (for advanced usage)
 export type { ClientManifest, ClientComponentEntry } from './build/rsc/client-manifest';
 export type { ServerManifest, ServerComponentEntry, RouteEntry } from './build/rsc/server-manifest';
-export type { RSCPayload, ClientReference } from './build/rsc/rsc-renderer';

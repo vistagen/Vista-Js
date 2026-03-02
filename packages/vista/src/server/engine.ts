@@ -8,37 +8,70 @@ import webpack from 'webpack';
 import webpackDevMiddleware from 'webpack-dev-middleware';
 import webpackHotMiddleware from 'webpack-hot-middleware';
 import { RouterProvider } from '../index';
-import { loadConfig } from '../config';
-import { ErrorOverlay } from '../dev-error';
+import { loadConfig, resolveStructureValidationConfig } from '../config';
+import { ErrorOverlay, renderErrorHTML } from '../dev-error';
+import { assertVistaArtifacts } from './artifact-validator';
+import {
+  resolveNotFoundComponent,
+  resolveRootLayout,
+  resolveLayoutChain,
+  type RootRenderMode,
+  type ResolvedLayout,
+} from './root-resolver';
+import { StructureWatcher, type StructureWatchEvent } from './structure-watch';
+import { runMiddleware, applyMiddlewareResult } from './middleware-runner';
+import { createImageHandler } from './image-optimizer';
+import { getCachedPage, loadStaticPagesFromDisk, isRevalidating } from './static-cache';
+import { revalidatePath } from './static-generator';
+import { getAllFontHTML as getFontHeadHTML } from '../font/registry';
+import {
+  printServerReady,
+  requestLogger,
+  logInfo,
+  logEvent,
+  logError,
+  logCompiling,
+  logCompiled,
+} from './logger';
+import type { StructureValidationResult } from './structure-validator';
+import {
+  logValidationResult,
+  logDevBlocked,
+  logDevUnblocked,
+  logWatcherStart,
+  formatIssuesForOverlay,
+} from './structure-log';
 
-
-
-// Support CSS imports (ignore them on server)
-require.extensions['.css'] = () => {};
+// Support CSS imports on server runtime
+// - Regular .css: ignored (handled by PostCSS)
+// - .module.css: return empty class mapping (webpack build handles real mappings)
+require.extensions['.css'] = (m: any, filename: string) => {
+  if (filename.endsWith('.module.css')) {
+    m.exports = {};
+  }
+};
 
 // Use SWC for faster server-side TypeScript compilation
 try {
-    // Try to resolve from project's node_modules first (where apps install their deps)
-    const swcPath = require.resolve('@swc-node/register', { paths: [process.cwd()] });
-    require(swcPath);
-    console.log("Using SWC for server-side TypeScript compilation (Rust-powered)");
+  // Try to resolve from project's node_modules first (where apps install their deps)
+  const swcPath = require.resolve('@swc-node/register', { paths: [process.cwd()] });
+  require(swcPath);
 } catch (e) {
-    // Fallback to ts-node if @swc-node not available
-    try {
-        const tsNodePath = require.resolve('ts-node', { paths: [process.cwd()] });
-        require(tsNodePath).register({
-            transpileOnly: true,
-            compilerOptions: {
-                module: 'commonjs',
-                jsx: 'react-jsx',
-                moduleResolution: 'node',
-                esModuleInterop: true
-            }
-        });
-        console.log("Using ts-node for server-side TypeScript compilation");
-    } catch (e2) {
-        console.warn("No TypeScript compiler found for SSR.");
-    }
+  // Fallback to ts-node if @swc-node not available
+  try {
+    const tsNodePath = require.resolve('ts-node', { paths: [process.cwd()] });
+    require(tsNodePath).register({
+      transpileOnly: true,
+      compilerOptions: {
+        module: 'commonjs',
+        jsx: 'react-jsx',
+        moduleResolution: 'node16',
+        esModuleInterop: true,
+      },
+    });
+  } catch (e2) {
+    // No TypeScript compiler found
+  }
 }
 
 // ============================================================================
@@ -46,29 +79,53 @@ try {
 // ============================================================================
 import { wrapClientComponent } from './client-boundary';
 
-// Cache to track which files are client components
-const clientComponentFiles = new Set<string>();
+// Cache absolute client file path -> stable component ID
+const clientComponentIdsByPath = new Map<string, string>();
 
 // Initialize client component registry from scan
-function initClientComponentRegistry(appDir: string): void {
-    const { scanAppDirectory, isNativeAvailable } = require('../bin/file-scanner');
-    try {
-        const result = scanAppDirectory(appDir);
-        result.clientComponents.forEach((c: { absolutePath: string }) => {
-            // Normalize path for comparison
-            const normalized = c.absolutePath.replace(/\\/g, '/').toLowerCase();
-            clientComponentFiles.add(normalized);
-        });
-        console.log(`[Vista RSC] Registered ${clientComponentFiles.size} client component(s) for hydration wrapping`);
-    } catch (e) {
-        // Fallback - scanning not available
-    }
+function normalizeModulePath(filePath: string): string {
+  return filePath.replace(/\\/g, '/').toLowerCase();
 }
 
-// Check if a file is a client component
-function isClientComponentFile(filePath: string): boolean {
-    const normalized = filePath.replace(/\\/g, '/').toLowerCase();
-    return clientComponentFiles.has(normalized);
+function toComponentId(relativePath: string): string {
+  return relativePath.replace(/\\/g, '/').replace(/\.(tsx|ts|jsx|js)$/, '');
+}
+
+function registerClientComponents(scanDir: string, prefix: string = ''): number {
+  if (!fs.existsSync(scanDir)) return 0;
+
+  const { scanAppDirectory } = require('../bin/file-scanner');
+  const result = scanAppDirectory(scanDir);
+
+  result.clientComponents.forEach((component: { absolutePath: string; relativePath: string }) => {
+    const normalizedAbsolute = normalizeModulePath(component.absolutePath);
+    const prefixedPath = prefix ? `${prefix}${component.relativePath}` : component.relativePath;
+    clientComponentIdsByPath.set(normalizedAbsolute, toComponentId(prefixedPath));
+  });
+
+  return result.clientComponents.length;
+}
+
+function initClientComponentRegistry(appDir: string, cwd: string): void {
+  try {
+    clientComponentIdsByPath.clear();
+
+    const appCount = registerClientComponents(appDir);
+    const componentsCount = registerClientComponents(path.join(cwd, 'components'), 'components/');
+
+    if (process.env.VISTA_DEBUG) {
+      console.log(
+        `[Vista JS RSC] Registered ${clientComponentIdsByPath.size} client component(s) for hydration wrapping (app=${appCount}, components=${componentsCount})`
+      );
+    }
+  } catch (e) {
+    // Fallback - scanning not available
+  }
+}
+
+function getClientComponentId(filePath: string): string | null {
+  const normalized = normalizeModulePath(filePath);
+  return clientComponentIdsByPath.get(normalized) ?? null;
 }
 
 // Store original require for tsx/ts files
@@ -81,595 +138,757 @@ const reactPath = require.resolve('react');
 const reactDomPath = require.resolve('react-dom');
 const originalResolveFilename = Module._resolveFilename;
 
-Module._resolveFilename = function(request: string, parent: any, isMain: boolean, options: any) {
-    // Redirect all react/react-dom requires to our single instance
-    if (request === 'react') {
-        return reactPath;
+Module._resolveFilename = function (request: string, parent: any, isMain: boolean, options: any) {
+  // Redirect all react/react-dom requires to our single instance
+  if (request === 'react') {
+    return reactPath;
+  }
+  if (request === 'react-dom') {
+    return reactDomPath;
+  }
+  if (request.startsWith('react-dom/')) {
+    // Handle subpaths like react-dom/server, react-dom/client
+    const subpath = request.replace('react-dom/', '');
+    try {
+      return require.resolve(`react-dom/${subpath}`, { paths: [path.dirname(reactDomPath)] });
+    } catch {
+      return originalResolveFilename.call(this, request, parent, isMain, options);
     }
-    if (request === 'react-dom') {
-        return reactDomPath;
+  }
+  if (request.startsWith('react/')) {
+    // Handle subpaths like react/jsx-runtime
+    const subpath = request.replace('react/', '');
+    try {
+      return require.resolve(`react/${subpath}`, { paths: [path.dirname(reactPath)] });
+    } catch {
+      return originalResolveFilename.call(this, request, parent, isMain, options);
     }
-    if (request.startsWith('react-dom/')) {
-        // Handle subpaths like react-dom/server, react-dom/client
-        const subpath = request.replace('react-dom/', '');
-        try {
-            return require.resolve(`react-dom/${subpath}`, { paths: [path.dirname(reactDomPath)] });
-        } catch {
-            return originalResolveFilename.call(this, request, parent, isMain, options);
-        }
-    }
-    if (request.startsWith('react/')) {
-        // Handle subpaths like react/jsx-runtime
-        const subpath = request.replace('react/', '');
-        try {
-            return require.resolve(`react/${subpath}`, { paths: [path.dirname(reactPath)] });
-        } catch {
-            return originalResolveFilename.call(this, request, parent, isMain, options);
-        }
-    }
-    return originalResolveFilename.call(this, request, parent, isMain, options);
+  }
+  return originalResolveFilename.call(this, request, parent, isMain, options);
 };
 
 // Global flag to control wrapping
 let wrapClientComponents = false;
 
-export function enableClientComponentWrapping(appDir: string): void {
-    initClientComponentRegistry(appDir);
-    
-    // Clear require cache for client component files so they can be wrapped
-    for (const clientPath of clientComponentFiles) {
-        // Find and clear all cached versions of this module
-        for (const cachedPath of Object.keys(require.cache)) {
-            const normalizedCached = cachedPath.replace(/\\/g, '/').toLowerCase();
-            if (normalizedCached === clientPath) {
-                delete require.cache[cachedPath];
-            }
-        }
+export function enableClientComponentWrapping(appDir: string, cwd: string): void {
+  initClientComponentRegistry(appDir, cwd);
+
+  // Clear require cache for client component files so they can be wrapped
+  for (const clientPath of clientComponentIdsByPath.keys()) {
+    // Find and clear all cached versions of this module
+    for (const cachedPath of Object.keys(require.cache)) {
+      const normalizedCached = normalizeModulePath(cachedPath);
+      if (normalizedCached === clientPath) {
+        delete require.cache[cachedPath];
+      }
     }
-    
-    wrapClientComponents = true;
-    
-    // Override Module._load to wrap client components
-    Module._load = function(request: string, parent: any, isMain: boolean) {
-        const result = originalLoad.apply(this, arguments);
-        
-        // Only process if wrapping is enabled and we have a parent with filename
-        if (wrapClientComponents && parent?.filename) {
-            try {
-                const resolved = Module._resolveFilename(request, parent, isMain);
-                
-                // Check if this is a client component
-                if (isClientComponentFile(resolved) && result?.default) {
-                    // Get component ID from filename
-                    const componentId = path.basename(resolved).replace(/\.(tsx|ts|jsx|js)$/, '');
-                    
-                    // Wrap the default export if not already wrapped
-                    if (!result.default.__vistaWrapped) {
-                        const OriginalComponent = result.default;
-                        const WrappedComponent = wrapClientComponent(OriginalComponent, componentId);
-                        (WrappedComponent as any).__vistaWrapped = true;
-                        result.default = WrappedComponent;
-                    }
-                }
-            } catch (e) {
-                // Ignore resolution errors
-            }
+  }
+
+  wrapClientComponents = true;
+
+  // Override Module._load to wrap client components
+  Module._load = function (request: string, parent: any, isMain: boolean) {
+    const result = originalLoad.apply(this, arguments);
+
+    // Only process if wrapping is enabled and we have a parent with filename
+    if (wrapClientComponents && parent?.filename) {
+      try {
+        const resolved = Module._resolveFilename(request, parent, isMain);
+
+        // Check if this is a client component
+        const componentId = getClientComponentId(resolved);
+        if (componentId && result?.default) {
+          // Wrap the default export if not already wrapped
+          if (!result.default.__vistaWrapped) {
+            const OriginalComponent = result.default;
+            const WrappedComponent = wrapClientComponent(OriginalComponent, componentId);
+            (WrappedComponent as any).__vistaWrapped = true;
+            result.default = WrappedComponent;
+          }
         }
-        
-        return result;
-    };
+      } catch (e) {
+        // Ignore resolution errors
+      }
+    }
+
+    return result;
+  };
 }
 
-
 export function disableClientComponentWrapping(): void {
-    wrapClientComponents = false;
+  wrapClientComponents = false;
 }
 // ============================================================================
 
-console.log("React Path (Engine):", require.resolve('react'));
-console.log("ReactDOM Path (Engine):", require.resolve('react-dom'));
-
-
 export function startServer(port: number = 3003, compiler?: webpack.Compiler) {
-    const app = express();
-    const cwd = process.cwd();
-    const vistaConfig = loadConfig(cwd);
-    const isDev = process.env.NODE_ENV !== 'production';
-    const appDir = path.join(cwd, 'app');
+  const app = express();
+  const cwd = process.cwd();
+  const vistaConfig = loadConfig(cwd);
+  const isDev = process.env.NODE_ENV !== 'production';
+  const appDir = path.join(cwd, 'app');
 
-    // Allow port override from config
-    const finalPort = vistaConfig.server?.port || port;
+  // Allow port override from config
+  const finalPort = vistaConfig.server?.port || port;
 
-    console.log("Starting Vista Server...");
-    console.log("App Directory:", cwd);
-    console.log("Loaded Config:", JSON.stringify(vistaConfig, null, 2));
-    
-    // Enable RSC: Auto-wrap client components with hydration markers
-    enableClientComponentWrapping(appDir);
+  // Request logger — logs GET/POST with timing (skip internal webpack requests)
+  app.use(requestLogger());
 
-    // Webpack Dev + Hot Middleware (only in dev mode with compiler)
-    if (isDev && compiler) {
-        console.log("Enabling Webpack HMR...");
-        
-        app.use(webpackDevMiddleware(compiler, {
-            publicPath: '/',
-            stats: 'minimal',
-            writeToDisk: (filePath) => {
-                // Write CSS to disk (served statically)
-                return filePath.endsWith('.css');
-            }
-        }));
+  // In dev mode, webpack-dev-middleware serves client.js from memory — skip artifact check
+  if (!isDev) {
+    try {
+      assertVistaArtifacts(cwd, 'legacy');
+    } catch (error) {
+      const message = (error as Error).message;
+      console.error(message);
+      process.exit(1);
+    }
+  }
 
-        app.use(webpackHotMiddleware(compiler, {
-            log: false, // Reduce console noise
-            path: '/__webpack_hmr',
-            heartbeat: 2000,
-        }));
-        
-        // Server-Side Live Reload via SSE
-        // Watches server component files and triggers page reload
-        const sseClients: Set<express.Response> = new Set();
-        
-        // SSE endpoint for server reload
-        app.get('/__vista_reload', (req, res) => {
-            res.setHeader('Content-Type', 'text/event-stream');
-            res.setHeader('Cache-Control', 'no-cache');
-            res.setHeader('Connection', 'keep-alive');
-            res.flushHeaders();
-            
-            sseClients.add(res);
-            
-            // Send initial connection message
-            res.write('data: connected\n\n');
-            
-            req.on('close', () => {
-                sseClients.delete(res);
-            });
+  // ========================================================================
+  // Structure Validation (dev + strict-block)
+  // ========================================================================
+  const structureConfig = resolveStructureValidationConfig(vistaConfig);
+  let currentStructureState: StructureValidationResult | null = null;
+  let structureWatcher: StructureWatcher | null = null;
+
+  if (structureConfig.enabled) {
+    const { validateAppStructure } = require('./structure-validator');
+    const initialResult = validateAppStructure({ cwd }) as StructureValidationResult;
+    currentStructureState = initialResult;
+    logValidationResult(initialResult, structureConfig.logLevel);
+
+    if (initialResult.state === 'error' && structureConfig.mode === 'strict') {
+      logDevBlocked();
+    }
+  }
+
+  // Enable RSC: Auto-wrap client components with hydration markers
+  enableClientComponentWrapping(appDir, cwd);
+
+  // Load pre-rendered static pages from disk into in-memory cache
+  const vistaDirRoot = path.join(cwd, '.vista');
+  const loadedStaticPages = loadStaticPagesFromDisk(vistaDirRoot);
+  if (loadedStaticPages > 0) {
+    logInfo(`Loaded ${loadedStaticPages} pre-rendered page(s) from cache`);
+  }
+
+  // Webpack Dev + Hot Middleware (only in dev mode with compiler)
+  if (isDev && compiler) {
+    if (process.env.VISTA_DEBUG) logInfo('Webpack HMR enabled');
+
+    app.use(
+      webpackDevMiddleware(compiler, {
+        publicPath: '/',
+        stats: 'errors-warnings',
+        writeToDisk: (filePath) => {
+          // Write CSS to disk (served statically)
+          return filePath.endsWith('.css');
+        },
+      })
+    );
+
+    app.use(
+      webpackHotMiddleware(compiler, {
+        log: false, // Reduce console noise
+        path: '/__webpack_hmr',
+        heartbeat: 2000,
+      })
+    );
+
+    // Server-Side Live Reload via SSE
+    // Watches server component files and triggers page reload
+    const sseClients: Set<express.Response> = new Set();
+
+    // SSE endpoint for server reload
+    app.get('/__vista_reload', (req, res) => {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.flushHeaders();
+
+      sseClients.add(res);
+
+      // Send initial connection message
+      res.write('data: connected\n\n');
+
+      req.on('close', () => {
+        sseClients.delete(res);
+      });
+    });
+
+    // Watch server files and trigger reload
+    let debounceTimer: NodeJS.Timeout | null = null;
+    const triggerReload = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        logEvent('Server file changed, reloading...');
+        sseClients.forEach((client) => {
+          client.write('data: reload\n\n');
         });
-        
-        // Watch server files and trigger reload
-        let debounceTimer: NodeJS.Timeout | null = null;
-        const triggerReload = () => {
-            if (debounceTimer) clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(() => {
-                console.log('[Vista] Server file changed, triggering reload...');
-                sseClients.forEach(client => {
-                    client.write('data: reload\n\n');
-                });
-            }, 100);
-        };
-        
-        // Push compile errors to browser via SSE
-        const pushCompileError = (errorMessage: string) => {
-            const errorData = JSON.stringify({
-                type: 'error',
-                message: errorMessage
-            });
-            sseClients.forEach(client => {
-                client.write(`data: ${errorData}\n\n`);
-            });
-        };
-        
-        // Push build success to browser
-        const pushBuildSuccess = () => {
-             const data = JSON.stringify({ type: 'ok' });
-             sseClients.forEach(client => {
-                 client.write(`data: ${data}\n\n`);
-             });
-        };
+      }, 100);
+    };
 
-        // Listen to webpack compilation errors
-        compiler.hooks.done.tap('VistaSSE', (stats) => {
-            if (stats.hasErrors()) {
-                const errors = stats.toJson().errors || [];
-                const errorMessage = errors.map(e => typeof e === 'string' ? e : e.message).join('\n');
-                console.log('[Vista] Build error detected, pushing to browser...');
-                pushCompileError(errorMessage);
-            } else {
-                pushBuildSuccess();
-            }
-        });
-        
-        // Watch the app directory for server file changes
-        fs.watch(appDir, { recursive: true }, (event, filename) => {
-            if (filename && (filename.endsWith('.tsx') || filename.endsWith('.ts'))) {
-                // Check if it's a server component (not client)
-                const filePath = path.join(appDir, filename);
-                try {
-                    const content = fs.readFileSync(filePath, 'utf-8');
-                    // Server files don't have 'client load' directive
-                    if (!content.includes("'client load'") && !content.includes('"client load"')) {
-                        triggerReload();
-                    }
-                } catch (e) {
-                    // File might be deleted or being written
-                }
-            }
-        });
+    // Push compile errors to browser via SSE
+    const pushCompileError = (errorMessage: string) => {
+      const errorData = JSON.stringify({
+        type: 'error',
+        message: errorMessage,
+      });
+      sseClients.forEach((client) => {
+        client.write(`data: ${errorData}\n\n`);
+      });
+    };
+
+    // Push build success to browser
+    const pushBuildSuccess = () => {
+      const data = JSON.stringify({ type: 'ok' });
+      sseClients.forEach((client) => {
+        client.write(`data: ${data}\n\n`);
+      });
+    };
+
+    // Listen to webpack compilation errors
+    compiler.hooks.done.tap('VistaSSE', (stats) => {
+      if (stats.hasErrors()) {
+        const errors = stats.toJson().errors || [];
+        const errorMessage = errors.map((e) => (typeof e === 'string' ? e : e.message)).join('\n');
+        logEvent('Build error detected, pushing to browser...');
+        pushCompileError(errorMessage);
+      } else {
+        pushBuildSuccess();
+      }
+    });
+
+    // Watch the app directory for server file changes
+    fs.watch(appDir, { recursive: true }, (event, filename) => {
+      if (filename && (filename.endsWith('.tsx') || filename.endsWith('.ts'))) {
+        // Check if it's a server component (not client)
+        const filePath = path.join(appDir, filename);
+        try {
+          const content = fs.readFileSync(filePath, 'utf-8');
+          // Server files don't have 'use client' directive
+          if (!content.includes("'use client'") && !content.includes('"use client"')) {
+            triggerReload();
+          }
+        } catch (e) {
+          // File might be deleted or being written
+        }
+      }
+    });
+
+    // ====================================================================
+    // Structure Validation Watcher (dev mode)
+    // ====================================================================
+    if (structureConfig.enabled) {
+      structureWatcher = new StructureWatcher({
+        cwd,
+        debounceMs: structureConfig.watchDebounceMs,
+      });
+
+      structureWatcher.on('validation', (event: StructureWatchEvent) => {
+        logValidationResult(
+          { state: event.state, issues: event.issues, routeGraph: [], timestamp: event.timestamp },
+          structureConfig.logLevel
+        );
+      });
+
+      structureWatcher.on('structure-error', (event: StructureWatchEvent) => {
+        if (structureConfig.mode === 'strict') {
+          logDevBlocked();
+          currentStructureState = {
+            state: 'error',
+            issues: event.issues,
+            routeGraph: [],
+            timestamp: event.timestamp,
+          };
+          // Push structure error to browser via SSE
+          const overlayMessage = formatIssuesForOverlay(
+            currentStructureState,
+            structureConfig.includeWarningsInOverlay
+          );
+          const errorData = JSON.stringify({
+            type: 'structure-error',
+            message: overlayMessage,
+          });
+          sseClients.forEach((client) => {
+            client.write(`data: ${errorData}\n\n`);
+          });
+        }
+      });
+
+      structureWatcher.on('structure-ok', (event: StructureWatchEvent) => {
+        const wasBlocked =
+          currentStructureState?.state === 'error' && structureConfig.mode === 'strict';
+        currentStructureState = {
+          state: 'ok',
+          issues: event.issues,
+          routeGraph: [],
+          timestamp: event.timestamp,
+        };
+        if (wasBlocked) {
+          logDevUnblocked();
+          const data = JSON.stringify({ type: 'structure-ok' });
+          sseClients.forEach((client) => {
+            client.write(`data: ${data}\n\n`);
+          });
+        }
+      });
+
+      logWatcherStart();
+      structureWatcher.start().catch((err) => {
+        console.error('[vista:validate] Failed to start structure watcher:', err);
+      });
+    }
+  }
+
+  // Serve static files (public)
+  app.use(express.static(path.join(cwd, 'public')));
+
+  // Image optimization endpoint
+  const imageHandler = createImageHandler(cwd, isDev);
+  app.get('/_vista/image', imageHandler);
+
+  // Serve .vista build artifacts with proper routing
+  // /_vista/static/* -> .vista/static/*
+  app.use('/_vista/static', express.static(path.join(cwd, '.vista', 'static')));
+
+  // Legacy: Serve .vista root for backward compatibility (client.css, etc.)
+  app.use(express.static(path.join(cwd, '.vista')));
+
+  app.use(async (req, res, next) => {
+    if (req.path.startsWith('/styles.css') || req.path.startsWith('/__webpack_hmr')) {
+      return next();
     }
 
-    // Serve static files (public)
-    app.use(express.static(path.join(cwd, 'public')));
-    
-    // Serve .vista build artifacts with proper routing
-    // /_vista/static/* -> .vista/static/*
-    app.use('/_vista/static', express.static(path.join(cwd, '.vista', 'static')));
-    
-    // Legacy: Serve .vista root for backward compatibility (client.css, etc.)
-    app.use(express.static(path.join(cwd, '.vista')));
+    // ====================================================================
+    // Structure validation gate (strict-block in dev)
+    // ====================================================================
+    if (
+      isDev &&
+      structureConfig.enabled &&
+      structureConfig.mode === 'strict' &&
+      currentStructureState?.state === 'error'
+    ) {
+      const overlayMessage = formatIssuesForOverlay(
+        currentStructureState,
+        structureConfig.includeWarningsInOverlay
+      );
+      const errorInfo = {
+        type: 'build' as const,
+        message: `Structure Validation Failed\n\n${overlayMessage}`,
+      };
+      res.status(500).send(renderErrorHTML([errorInfo]));
+      return;
+    }
 
-    app.use(async (req, res, next) => {
-        if (req.path.startsWith('/styles.css') || req.path.startsWith('/__webpack_hmr')) {
-            return next();
-        }
-        
-        // MIDDLEWARE SUPPORT
-        const middlewarePath = path.resolve(cwd, 'middleware.ts');
-        const middlewareTsxPath = path.resolve(cwd, 'middleware.tsx');
-        const middlewareJsPath = path.resolve(cwd, 'middleware.js');
-        
-        let middlewareFile = null;
-        if (fs.existsSync(middlewarePath)) {
-            middlewareFile = middlewarePath;
-        } else if (fs.existsSync(middlewareTsxPath)) {
-            middlewareFile = middlewareTsxPath;
-        } else if (fs.existsSync(middlewareJsPath)) {
-            middlewareFile = middlewareJsPath;
-        }
-        
-        if (middlewareFile) {
-            try {
-                // Clear cache for hot reloading
-                if (isDev) {
-                    delete require.cache[require.resolve(middlewareFile)];
-                }
-                
-                const middlewareModule = require(middlewareFile);
-                const middleware = middlewareModule.default || middlewareModule.middleware;
-                
-                if (typeof middleware === 'function') {
-                    // Create NextRequest-like object
-                    const nextRequest = {
-                        url: req.protocol + '://' + req.get('host') + req.originalUrl,
-                        method: req.method,
-                        headers: new Map(Object.entries(req.headers)),
-                        nextUrl: {
-                            pathname: req.path,
-                            searchParams: new URLSearchParams(req.query as any),
-                            href: req.protocol + '://' + req.get('host') + req.originalUrl,
-                            origin: req.protocol + '://' + req.get('host'),
-                        },
-                        cookies: {
-                            get: (name: string) => req.cookies?.[name] ? { name, value: req.cookies[name] } : undefined,
-                            getAll: () => Object.entries(req.cookies || {}).map(([name, value]) => ({ name, value })),
-                            has: (name: string) => !!req.cookies?.[name],
-                        },
-                    };
-                    
-                    const response = await middleware(nextRequest);
-                    
-                    // Handle middleware response
-                    if (response) {
-                        // Check for redirect
-                        const location = response.headers?.get?.('Location');
-                        if (location) {
-                            return res.redirect(response.status || 307, location);
-                        }
-                        
-                        // Check for rewrite
-                        const rewrite = response.headers?.get?.('x-middleware-rewrite');
-                        if (rewrite) {
-                            req.url = rewrite;
-                        }
-                        
-                        // Check if middleware wants to continue
-                        const shouldContinue = response.headers?.get?.('x-middleware-next');
-                        if (!shouldContinue && response.status && response.status !== 200) {
-                            return res.status(response.status).end();
-                        }
-                    }
-                }
-            } catch (err) {
-                console.error('Middleware Error:', err);
-            }
-        }
-        
-        // API ROUTES SUPPORT - Next.js App Router Style
-        if (req.path.startsWith('/api/')) {
-            // Remove /api/ prefix and check for route.ts file
-            const apiRoute = req.path.substring(5); // Remove '/api/'
-            
-            // Try route.ts pattern first (Next.js App Router style)
-            const routeTsPath = path.resolve(cwd, 'app', 'api', apiRoute, 'route.ts');
-            const routeTsxPath = path.resolve(cwd, 'app', 'api', apiRoute, 'route.tsx');
-            
-            // Fallback to old pattern (api/path.ts)
-            const legacyPath = path.resolve(cwd, 'app', 'api', apiRoute + '.ts');
-            
-            let apiPath = null;
-            if (fs.existsSync(routeTsPath)) {
-                apiPath = routeTsPath;
-            } else if (fs.existsSync(routeTsxPath)) {
-                apiPath = routeTsxPath;
-            } else if (fs.existsSync(legacyPath)) {
-                apiPath = legacyPath;
-            }
-            
-            if (apiPath) {
-                try {
-                    delete require.cache[require.resolve(apiPath)];
-                    const apiModule = require(apiPath);
-                    
-                    // Next.js App Router style: named exports for HTTP methods
-                    const method = req.method?.toUpperCase() || 'GET';
-                    const methodHandler = apiModule[method];
-                    
-                    if (typeof methodHandler === 'function') {
-                        // Create Request-like object for App Router compatibility
-                        const request = {
-                            url: req.protocol + '://' + req.get('host') + req.originalUrl,
-                            method: req.method,
-                            headers: new Map(Object.entries(req.headers)),
-                            json: async () => req.body,
-                            text: async () => JSON.stringify(req.body),
-                            nextUrl: {
-                                pathname: req.path,
-                                searchParams: new URLSearchParams(req.query as any),
-                            },
-                        };
-                        
-                        const result = await methodHandler(request, { params: {} });
-                        
-                        // Handle Response object
-                        if (result && typeof result.json === 'function') {
-                            const json = await result.json();
-                            return res.status(result.status || 200).json(json);
-                        } else if (result) {
-                            return res.status(200).json(result);
-                        }
-                        return res.status(204).end();
-                    }
-                    
-                    // Fallback to default export (Pages Router style)
-                    const handler = apiModule.default;
-                    if (typeof handler === 'function') {
-                        return handler(req, res);
-                    }
-                    
-                    return res.status(405).json({ error: `Method ${method} not allowed` });
-                } catch (err) {
-                    console.error('API Route Error:', err);
-                    return res.status(500).json({ error: "Internal Server Error in API" });
-                }
-            } else {
-                return res.status(404).json({ error: "API Route Not Found" });
-            }
-        }
+    // MIDDLEWARE SUPPORT
+    const middlewareResult = await runMiddleware(req, cwd, isDev);
+    const finalized = applyMiddlewareResult(middlewareResult, req, res);
+    if (finalized) return;
 
+    // API ROUTES SUPPORT - Next.js App Router Style
+    if (req.path.startsWith('/api/')) {
+      // Remove /api/ prefix and check for route.ts file
+      const apiRoute = req.path.substring(5); // Remove '/api/'
+
+      // Try route.ts pattern first (Next.js App Router style)
+      const routeTsPath = path.resolve(cwd, 'app', 'api', apiRoute, 'route.ts');
+      const routeTsxPath = path.resolve(cwd, 'app', 'api', apiRoute, 'route.tsx');
+
+      // Fallback to old pattern (api/path.ts)
+      const legacyPath = path.resolve(cwd, 'app', 'api', apiRoute + '.ts');
+
+      let apiPath = null;
+      if (fs.existsSync(routeTsPath)) {
+        apiPath = routeTsPath;
+      } else if (fs.existsSync(routeTsxPath)) {
+        apiPath = routeTsxPath;
+      } else if (fs.existsSync(legacyPath)) {
+        apiPath = legacyPath;
+      }
+
+      if (apiPath) {
         try {
-            let pagePath;
-            let params: any = {};
-            
-            // Route Matching Logic
-            const getExactPath = (p: string) => {
-                if (p === '/' || p === '/index') return path.resolve(cwd, 'app', 'index.tsx');
-                return path.resolve(cwd, 'app', p.substring(1), 'page.tsx');
+          delete require.cache[require.resolve(apiPath)];
+          const apiModule = require(apiPath);
+
+          // Next.js App Router style: named exports for HTTP methods
+          const method = req.method?.toUpperCase() || 'GET';
+          const methodHandler = apiModule[method];
+
+          if (typeof methodHandler === 'function') {
+            // Create Request-like object for App Router compatibility
+            const request = {
+              url: req.protocol + '://' + req.get('host') + req.originalUrl,
+              method: req.method,
+              headers: new Map(Object.entries(req.headers)),
+              json: async () => req.body,
+              text: async () => JSON.stringify(req.body),
+              nextUrl: {
+                pathname: req.path,
+                searchParams: new URLSearchParams(req.query as any),
+              },
             };
 
-            const tryPath = getExactPath(req.path);
-            
-            // Clear require cache for hot reloading in dev
-            if (isDev) {
-                Object.keys(require.cache).forEach(key => {
-                    if (key.includes(cwd) && key.includes('app')) {
-                        delete require.cache[key];
-                    }
-                });
+            const result = await methodHandler(request, { params: {} });
+
+            // Handle Response object
+            if (result && typeof result.json === 'function') {
+              const json = await result.json();
+              return res.status(result.status || 200).json(json);
+            } else if (result) {
+              return res.status(200).json(result);
             }
+            return res.status(204).end();
+          }
 
-            if (fs.existsSync(tryPath)) {
-                pagePath = tryPath;
-            } else {
-                // Dynamic Route Matching
-                const segments = req.path.split('/').filter(Boolean);
-                const appDir = path.resolve(cwd, 'app');
-                
-                if (segments.length === 2) {
-                    const [section, paramVal] = segments;
-                    const sectionPath = path.join(appDir, section);
-                    
-                    if (fs.existsSync(sectionPath) && fs.statSync(sectionPath).isDirectory()) {
-                        const subEntries = fs.readdirSync(sectionPath, { withFileTypes: true });
-                        const dynamicFolder = subEntries.find(d => d.isDirectory() && d.name.startsWith('[') && d.name.endsWith(']'));
-                        
-                        if (dynamicFolder) {
-                            const paramName = dynamicFolder.name.slice(1, -1);
-                            params[paramName] = paramVal;
-                            pagePath = path.join(sectionPath, dynamicFolder.name, 'page.tsx');
-                        }
-                    }
-                }
-            }
+          // Fallback to default export (Pages Router style)
+          const handler = apiModule.default;
+          if (typeof handler === 'function') {
+            return handler(req, res);
+          }
 
-            // 404 Handling
-            if (!pagePath || !fs.existsSync(pagePath)) {
-                 const notFoundPath = path.resolve(cwd, 'app', 'not-found.tsx');
-                 if (fs.existsSync(notFoundPath)) {
-                     const NotFoundModule = require(notFoundPath);
-                     const NotFoundComponent = NotFoundModule.default;
-                     const RootModule = require(path.resolve(cwd, 'app', 'root.tsx'));
-                     const RootComponent = RootModule.default;
-                     renderApp(req, res, NotFoundComponent, RootComponent, {}, { title: "404 Not Found" }, vistaConfig, 404, isDev);
-                     return;
-                 }
-                 res.status(404).send('<h1>404 - Page Not Found</h1>');
-                 return;
-            }
-
-            // Load Modules
-            const PageModule = require(pagePath);
-            const PageComponent = PageModule.default;
-            const RootModule = require(path.resolve(cwd, 'app', 'root.tsx'));
-            const RootComponent = RootModule.default;
-
-            if (!PageComponent) {
-                 res.status(500).send('<h1>Page does not export default component</h1>');
-                 return;
-            }
-
-            // Data Fetching
-            let props: any = {};
-            if (PageModule.getServerProps) {
-                props = await PageModule.getServerProps({ query: req.query, params, req });
-            }
-
-            // Metadata extraction - merge layout + page metadata
-            let metadata: any = {};
-            
-            // Get root layout metadata first
-            if (RootModule.metadata) {
-                metadata = { ...RootModule.metadata };
-            }
-            
-            // Get page static metadata (overrides root)
-            if (PageModule.metadata) {
-                metadata = { ...metadata, ...PageModule.metadata };
-            }
-            
-            // Get dynamic metadata from generateMetadata function
-            if (typeof PageModule.generateMetadata === 'function') {
-                try {
-                    const dynamicMeta = await PageModule.generateMetadata(
-                        { params, searchParams: req.query },
-                        metadata // parent metadata
-                    );
-                    metadata = { ...metadata, ...dynamicMeta };
-                } catch (e) {
-                    console.error('Error in generateMetadata:', e);
-                }
-            }
-
-            // Render with merged metadata
-            renderApp(req, res, PageComponent, RootComponent, { ...props, params }, metadata, vistaConfig, 200, isDev);
-
-        } catch (err: any) {
-            console.error(err);
-            // Render Server-Side Error Overlay
-            const errorInfo = {
-                type: 'runtime' as const,
-                message: err.message || 'Unknown Server Error',
-                stack: err.stack,
-                file: err.message.match && err.message.match(/(app\/.*?):(\d+):(\d+)/)?.[1] || undefined,
-            };
-
-            const errorHtml = renderToStaticMarkup(React.createElement(ErrorOverlay, { errors: [errorInfo] }));
-            res.status(500).send(`<!DOCTYPE html><html><body style="margin:0">${errorHtml}</body></html>`);
+          return res.status(405).json({ error: `Method ${method} not allowed` });
+        } catch (err) {
+          console.error(`[vista:ssr] API route error: ${(err as Error)?.message ?? String(err)}`);
+          return res.status(500).json({ error: 'Internal Server Error in API' });
         }
-    });
+      } else {
+        return res.status(404).json({ error: 'API Route Not Found' });
+      }
+    }
 
-    app.listen(finalPort, () => {
-        console.log(`Vista Server running at http://localhost:${finalPort}`);
-    });
+    // ==================================================================
+    // Static / ISR Cache Check
+    // ==================================================================
+    {
+      const cached = getCachedPage(req.path);
+      if (cached.page) {
+        res
+          .status(200)
+          .type('text/html')
+          .setHeader('X-Vista-Cache', cached.stale ? 'STALE' : 'HIT')
+          .send(cached.page.html);
+        return;
+      }
+    }
+
+    try {
+      let pagePath;
+      let params: any = {};
+
+      // Route Matching Logic
+      const getExactPath = (p: string) => {
+        if (p === '/' || p === '/index') return path.resolve(cwd, 'app', 'index.tsx');
+        return path.resolve(cwd, 'app', p.substring(1), 'page.tsx');
+      };
+
+      const tryPath = getExactPath(req.path);
+
+      // Clear require cache for hot reloading in dev
+      if (isDev) {
+        Object.keys(require.cache).forEach((key) => {
+          if (key.includes(cwd) && key.includes('app')) {
+            delete require.cache[key];
+          }
+        });
+      }
+
+      if (fs.existsSync(tryPath)) {
+        pagePath = tryPath;
+      } else {
+        // Dynamic Route Matching
+        const segments = req.path.split('/').filter(Boolean);
+        const appDir = path.resolve(cwd, 'app');
+
+        if (segments.length === 2) {
+          const [section, paramVal] = segments;
+          const sectionPath = path.join(appDir, section);
+
+          if (fs.existsSync(sectionPath) && fs.statSync(sectionPath).isDirectory()) {
+            const subEntries = fs.readdirSync(sectionPath, { withFileTypes: true });
+            const dynamicFolder = subEntries.find(
+              (d) =>
+                d.isDirectory() &&
+                d.name.startsWith('[') &&
+                d.name.endsWith(']') &&
+                d.name !== '[not-found]'
+            );
+
+            if (dynamicFolder) {
+              const paramName = dynamicFolder.name.slice(1, -1);
+              params[paramName] = paramVal;
+              pagePath = path.join(sectionPath, dynamicFolder.name, 'page.tsx');
+            }
+          }
+        }
+      }
+
+      const rootLayout = resolveRootLayout(cwd, isDev);
+
+      // 404 Handling
+      if (!pagePath || !fs.existsSync(pagePath)) {
+        const resolvedNotFound = resolveNotFoundComponent(cwd, rootLayout, isDev);
+        if (resolvedNotFound) {
+          renderApp(
+            req,
+            res,
+            resolvedNotFound.component,
+            rootLayout.component,
+            {},
+            { ...(rootLayout.metadata || {}), title: '404 Not Found' },
+            vistaConfig,
+            404,
+            isDev,
+            rootLayout.mode
+          );
+          return;
+        }
+        res.status(404).send('<h1>404 - Page Not Found</h1>');
+        return;
+      }
+
+      // Load Modules
+      const PageModule = require(pagePath);
+      const PageComponent = PageModule.default;
+      const RootComponent = rootLayout.component;
+
+      if (!PageComponent) {
+        res.status(500).send('<h1>Page does not export default component</h1>');
+        return;
+      }
+
+      // Data Fetching
+      let props: any = {};
+      if (PageModule.getServerProps) {
+        props = await PageModule.getServerProps({ query: req.query, params, req });
+      }
+
+      // Resolve the full nested layout chain (root → page directory)
+      const pageDir = path.dirname(pagePath);
+      const layouts = resolveLayoutChain(cwd, pageDir, isDev);
+
+      // Metadata extraction - merge all layout metadata + page metadata
+      let metadata: any = {};
+      for (const layout of layouts) {
+        if (layout.metadata) {
+          metadata = { ...metadata, ...layout.metadata };
+        }
+      }
+
+      // Get page static metadata (overrides layouts)
+      if (PageModule.metadata) {
+        metadata = { ...metadata, ...PageModule.metadata };
+      }
+
+      // Get dynamic metadata from generateMetadata function
+      if (typeof PageModule.generateMetadata === 'function') {
+        try {
+          const dynamicMeta = await PageModule.generateMetadata(
+            { params, searchParams: req.query },
+            metadata // parent metadata
+          );
+          metadata = { ...metadata, ...dynamicMeta };
+        } catch (e) {
+          console.error('Error in generateMetadata:', e);
+        }
+      }
+
+      // Render with nested layouts
+      renderApp(
+        req,
+        res,
+        PageComponent,
+        RootComponent,
+        { ...props, params },
+        metadata,
+        vistaConfig,
+        200,
+        isDev,
+        rootLayout.mode,
+        layouts.length > 0 ? layouts : undefined
+      );
+    } catch (err: any) {
+      if (err?.name === 'NotFoundError') {
+        try {
+          const rootLayout = resolveRootLayout(cwd, isDev);
+          const resolvedNotFound = resolveNotFoundComponent(cwd, rootLayout, isDev);
+          if (resolvedNotFound) {
+            renderApp(
+              req,
+              res,
+              resolvedNotFound.component,
+              rootLayout.component,
+              {},
+              { ...(rootLayout.metadata || {}), title: '404 Not Found' },
+              vistaConfig,
+              404,
+              isDev,
+              rootLayout.mode
+            );
+            return;
+          }
+          res.status(404).send('<h1>404 - Page Not Found</h1>');
+          return;
+        } catch (notFoundError) {
+          console.error(
+            `[vista:ssr] Failed to render NotFoundError fallback: ${(notFoundError as Error)?.message ?? String(notFoundError)}`
+          );
+        }
+      }
+      console.error(`[vista:ssr] Render error: ${err?.message || 'Unknown error'}`);
+      if (process.env.VISTA_DEBUG) {
+        console.error(err);
+      }
+      // Render Server-Side Error Overlay
+      const errorInfo = {
+        type: 'runtime' as const,
+        message: err.message || 'Unknown Server Error',
+        stack: err.stack,
+        file: (err.message.match && err.message.match(/(app\/.*?):(\d+):(\d+)/)?.[1]) || undefined,
+      };
+
+      res.status(500).send(renderErrorHTML([errorInfo]));
+    }
+  });
+
+  const server = app.listen(finalPort, () => {
+    printServerReady({ port: finalPort, mode: 'legacy' });
+  });
+
+  server.on('error', (error: any) => {
+    if (error?.code === 'EADDRINUSE') {
+      logError(`Port ${finalPort} is already in use.`);
+      process.exit(1);
+      return;
+    }
+
+    logError(`Startup failed: ${error?.message || String(error)}`);
+    if (process.env.VISTA_DEBUG) {
+      console.error(error);
+    }
+    process.exit(1);
+  });
 }
 
 // Helper to encapsulate Render Logic
-function renderApp(req: any, res: any, PageComponent: any, RootComponent: any, props: any, metadata: any, config: any, status: number = 200, isDev: boolean = false) {
-    // Import RouterContext from the router module
-    const { RouterContext } = require('../client/router');
-    const { generateMetadataHtml } = require('../metadata/generate');
-    
-    // Create router context value matching client structure
-    const routerValue = {
-        push: () => {},
-        replace: () => {},
-        back: () => {},
-        forward: () => {},
-        prefetch: () => {},
-        refresh: () => {},
-        params: props.params || {},
-        pathname: req.path
-    };
+function renderApp(
+  req: any,
+  res: any,
+  PageComponent: any,
+  RootComponent: any,
+  props: any,
+  metadata: any,
+  config: any,
+  status: number = 200,
+  isDev: boolean = false,
+  rootMode: RootRenderMode = 'legacy',
+  /** Optional full layout chain (outermost → innermost). When provided, RootComponent is ignored. */
+  layouts?: ResolvedLayout[]
+) {
+  // Import RouterContext from the router module
+  const { RouterContext } = require('../client/router');
+  const { generateMetadataHtml } = require('../metadata/generate');
 
-    // App content that will be hydrated inside #root
-    const appContent = React.createElement(
-        RouterContext.Provider, 
-        { value: routerValue },
-        React.createElement(RootComponent, { params: props.params || {} }, React.createElement(PageComponent, props))
-    );
+  // Create router context value matching client structure
+  const routerValue = {
+    push: () => {},
+    replace: () => {},
+    back: () => {},
+    forward: () => {},
+    prefetch: () => {},
+    refresh: () => {},
+    params: props.params || {},
+    pathname: req.path,
+  };
 
-    // Full HTML document shell - matches what client expects to hydrate
-    // Critical CSS AND blocking script to prevent FOUC (Flash of Unstyled Content)
-    const criticalCss = `
-        html, body { background: #0a0a0a; color: #ededed; }
-        html.light, html.light body { background: #ffffff; color: #171717; }
-    `;
-    
-    // Blocking script that runs immediately to set theme class
-    // This runs before any CSS loads, preventing flash
-    // Vista defaults to DARK MODE ONLY - no system preference check
-    const themeScript = `
-        (function() {
-            var d = document.documentElement;
-            
-            // Always use dark mode - Vista is dark-first
-            d.classList.add('dark');
-            d.classList.remove('light');
-            d.style.colorScheme = 'dark';
-            
-            // Global theme setter (kept for future use)
-            window.__vistaSetTheme = function(newTheme) {
-                d.classList.remove('light', 'dark');
-                d.classList.add(newTheme);
-                d.style.colorScheme = newTheme;
-            };
-        })();
-    `;
-    
-    const appElement = React.createElement(
-        'html',
-        { lang: 'en', className: 'dark' }, // Default to dark class
-        React.createElement('head', null,
-            // Critical CSS first
-            React.createElement('style', { 
-                dangerouslySetInnerHTML: { __html: criticalCss },
-                'data-vista-critical': 'true'
-            }),
-            // Blocking theme script
-            React.createElement('script', {
-                dangerouslySetInnerHTML: { __html: themeScript }
-            })
-        ),
-        React.createElement(
-            'body',
-            { className: 'antialiased' },
-            React.createElement('div', { id: 'root' }, appContent)
-        )
-    );
-    
-    let didError = false;
-    
-    // Generate metadata HTML from metadata object
-    let metadataHtml = '';
-    if (metadata) {
-        try {
-            metadataHtml = generateMetadataHtml(metadata);
-        } catch (e) {
-            console.error('Error generating metadata HTML:', e);
-        }
+  // Build the nested layout tree: Layout0 > Layout1 > ... > Page
+  let pageTree: React.ReactElement = React.createElement(PageComponent, props);
+
+  if (layouts && layouts.length > 0) {
+    // Wrap page in layouts from innermost to outermost
+    for (let i = layouts.length - 1; i >= 0; i--) {
+      const LayoutComp = layouts[i].component;
+      pageTree = React.createElement(LayoutComp, { params: props.params || {} }, pageTree);
     }
-    
-    const injectStream = new Transform({
-        transform(chunk: any, encoding: any, callback: any) {
-            let chunkString = chunk.toString();
-            
-            if (chunkString.includes('</head>')) {
-            // Inject metadata + CSS + Charset
-                const headInjection = `<meta charset="utf-8" />${metadataHtml}<link rel="stylesheet" href="/client.css">`;
-                chunkString = chunkString.replace('</head>', `${headInjection}</head>`);
-            }
+  } else {
+    // Fallback: single root layout wrapping page
+    pageTree = React.createElement(RootComponent, { params: props.params || {} }, pageTree);
+  }
 
-            if (chunkString.includes('</body>')) {
-                 const hydrationScript = `
+  // App content that will be hydrated inside #root
+  const appContent = React.createElement(RouterContext.Provider, { value: routerValue }, pageTree);
+
+  const appElement =
+    rootMode === 'document'
+      ? React.createElement(RouterContext.Provider, { value: routerValue }, pageTree)
+      : (() => {
+          // Full HTML document shell - legacy mode.
+          const criticalCss = `
+                html, body { background: #0a0a0a; color: #ededed; }
+                html.light, html.light body { background: #ffffff; color: #171717; }
+            `;
+          const themeScript = `
+                (function() {
+                    var d = document.documentElement;
+                    d.classList.add('dark');
+                    d.classList.remove('light');
+                    d.style.colorScheme = 'dark';
+                    window.__vistaSetTheme = function(newTheme) {
+                        d.classList.remove('light', 'dark');
+                        d.classList.add(newTheme);
+                        d.style.colorScheme = newTheme;
+                    };
+                })();
+            `;
+          return React.createElement(
+            'html',
+            { lang: 'en', className: 'dark' },
+            React.createElement(
+              'head',
+              null,
+              React.createElement('style', {
+                dangerouslySetInnerHTML: { __html: criticalCss },
+                'data-vista-critical': 'true',
+              }),
+              React.createElement('script', {
+                dangerouslySetInnerHTML: { __html: themeScript },
+              })
+            ),
+            React.createElement(
+              'body',
+              { className: 'antialiased' },
+              React.createElement('div', { id: 'root' }, appContent)
+            )
+          );
+        })();
+
+  let didError = false;
+
+  // Generate metadata HTML from metadata object
+  let metadataHtml = '';
+  if (metadata) {
+    try {
+      metadataHtml = generateMetadataHtml(metadata);
+    } catch (e) {
+      console.error('Error generating metadata HTML:', e);
+    }
+  }
+
+  const injectStream = new Transform({
+    transform(chunk: any, encoding: any, callback: any) {
+      let chunkString = chunk.toString();
+
+      if (chunkString.includes('</head>')) {
+        // Inject metadata + CSS + Charset
+        const fontHtml = getFontHeadHTML();
+        const headInjection = `<meta charset="utf-8" />${metadataHtml}${fontHtml}<link rel="stylesheet" href="/client.css">`;
+        chunkString = chunkString.replace('</head>', `${headInjection}</head>`);
+      }
+
+      if (chunkString.includes('</body>')) {
+        const hydrationScript = `
+                    <script>window.__VISTA_HYDRATE_DOCUMENT__ = ${rootMode === 'document' ? 'true' : 'false'};</script>
                     <script>
                         window.__INITIAL_PROPS__ = ${JSON.stringify(props)};
                         window.__VISTA_CONFIG__ = ${JSON.stringify(config)};
@@ -677,27 +896,30 @@ function renderApp(req: any, res: any, PageComponent: any, RootComponent: any, p
                     <script src="/vista-client-manifest.js"></script>
                     <script src="/client.js"></script>
                 `;
-                chunkString = chunkString.replace('</body>', `${hydrationScript}</body>`);
-            }
-            
-            this.push(chunkString);
-            callback();
-        }
-    });
+        chunkString = chunkString.replace('</body>', `${hydrationScript}</body>`);
+      }
 
-    const stream = renderToPipeableStream(appElement, {
-        onShellReady() {
-            res.statusCode = didError ? 500 : status;
-            res.setHeader('Content-type', 'text/html; charset=utf-8');
-            stream.pipe(injectStream).pipe(res);
-        },
-        onShellError(err: any) {
-            res.statusCode = 500;
-            res.send('<!doctype html><p>Loading...</p>');
-        },
-        onError(err: any) {
-            didError = true;
-            console.error(err);
-        }
-    });
+      this.push(chunkString);
+      callback();
+    },
+  });
+
+  const stream = renderToPipeableStream(appElement, {
+    onShellReady() {
+      res.statusCode = didError ? 500 : status;
+      res.setHeader('Content-type', 'text/html; charset=utf-8');
+      stream.pipe(injectStream).pipe(res);
+    },
+    onShellError(err: any) {
+      res.statusCode = 500;
+      res.send('<!doctype html><p>Loading...</p>');
+    },
+    onError(err: any) {
+      didError = true;
+      console.error(`[vista:ssr] Stream error: ${err?.message || 'Unknown stream error'}`);
+      if (process.env.VISTA_DEBUG) {
+        console.error(err);
+      }
+    },
+  });
 }

@@ -2,14 +2,14 @@
  * Vista Server Component Webpack Plugin
  * 
  * Checks for server component violations on every webpack compilation.
- * Fails the build if client hooks are used without 'client load' directive.
+ * Fails the build if client hooks are used without 'use client' directive.
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 import type { Compiler, Compilation } from 'webpack';
 
-// Client-only hooks and APIs that require 'client load' directive
+// Client-only hooks and APIs that require 'use client' directive
 const CLIENT_HOOKS = [
     'useState', 'useEffect', 'useLayoutEffect', 'useReducer', 'useRef',
     'useImperativeHandle', 'useCallback', 'useMemo', 'useContext',
@@ -24,7 +24,7 @@ interface ServerComponentError {
 
 function hasClientDirective(source: string): boolean {
     const trimmed = source.trim();
-    return trimmed.startsWith("'client load'") || trimmed.startsWith('"client load"');
+    return trimmed.startsWith("'use client'") || trimmed.startsWith('"use client"');
 }
 
 function detectClientHooks(source: string): string[] {
@@ -66,9 +66,9 @@ export class VistaServerComponentPlugin {
                     console.log(`\x1b[31m✗\x1b[0m ${error.file}`);
                     console.log(`  You're using \x1b[33m${error.hooks.join(', ')}\x1b[0m in a Server Component.`);
                     console.log('');
-                    console.log(`  \x1b[36mTo fix:\x1b[0m Add \x1b[33m'client load'\x1b[0m at the top of your file:`);
+                    console.log(`  \x1b[36mTo fix:\x1b[0m Add \x1b[33m'use client'\x1b[0m at the top of your file:`);
                     console.log('');
-                    console.log(`    \x1b[32m'client load';\x1b[0m`);
+                    console.log(`    \x1b[32m'use client';\x1b[0m`);
                     console.log('');
                     
                     // Add webpack error so it shows in overlay
@@ -76,7 +76,7 @@ export class VistaServerComponentPlugin {
                     const err = new WebpackError(
                         `Server Component Error: ${error.file}\n` +
                         `You're using ${error.hooks.join(', ')} in a Server Component.\n` +
-                        `Add 'client load' at the top of your file to make it a Client Component.`
+                        `Add 'use client' at the top of your file to make it a Client Component.`
                     );
                     err.file = error.file;
                     compilation.errors.push(err);

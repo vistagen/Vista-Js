@@ -13,7 +13,7 @@ import * as path from 'path';
 const clientComponentCache = new Map<string, boolean>();
 
 /**
- * Check if a file is a client component by checking for 'client load' directive
+ * Check if a file is a client component by checking for 'use client' directive
  */
 function isClientComponent(filePath: string): boolean {
     if (clientComponentCache.has(filePath)) {
@@ -22,8 +22,8 @@ function isClientComponent(filePath: string): boolean {
     
     try {
         const content = fs.readFileSync(filePath, 'utf-8');
-        const isClient = content.trimStart().startsWith("'client load'") || 
-                        content.trimStart().startsWith('"client load"');
+        const isClient = content.trimStart().startsWith("'use client'") || 
+                        content.trimStart().startsWith('"use client"');
         clientComponentCache.set(filePath, isClient);
         return isClient;
     } catch {

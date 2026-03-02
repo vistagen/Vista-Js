@@ -3,7 +3,7 @@
  * Server Component Manifest Generator
  *
  * Scans the app directory and builds a manifest of all Server Components.
- * Server components are all components WITHOUT 'client load' directive.
+ * Server components are all components WITHOUT 'use client' directive.
  *
  * Server components:
  * - Render on the server only
@@ -19,6 +19,14 @@ exports.getServerComponent = getServerComponent;
 exports.isServerComponentPath = isServerComponentPath;
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
+const component_identity_1 = require("./component-identity");
+const RESERVED_INTERNAL_SEGMENTS = new Set(['[not-found]']);
+function hasReservedInternalSegment(relativePath) {
+    return relativePath
+        .replace(/\\/g, '/')
+        .split('/')
+        .some((segment) => RESERVED_INTERNAL_SEGMENTS.has(segment));
+}
 // Try to load Rust NAPI bindings
 let rustNative = null;
 try {
@@ -40,14 +48,17 @@ catch (e) {
     // Fallback to JS
 }
 /**
- * Check if source has 'client load' directive
+ * Check if source has 'use client' directive
  */
 function hasClientDirective(source) {
+    const trimmed = source.trimStart();
+    if (trimmed.startsWith("'use client'") || trimmed.startsWith('"use client"')) {
+        return true;
+    }
     if (rustNative?.isClientComponent) {
         return rustNative.isClientComponent(source);
     }
-    const trimmed = source.trim();
-    return trimmed.startsWith("'client load'") || trimmed.startsWith('"client load"');
+    return false;
 }
 /**
  * Check for metadata exports
@@ -64,6 +75,40 @@ function analyzeMetadata(source) {
         hasMetadata: /export\s+const\s+metadata\b/.test(source),
         hasGenerateMetadata: /export\s+(async\s+)?function\s+generateMetadata\b/.test(source),
     };
+}
+/**
+ * Analyze route rendering configuration exports.
+ *
+ * Detects:
+ *   export const dynamic = 'force-static' | 'force-dynamic' | 'auto' | 'error';
+ *   export const revalidate = <number> | false;
+ *   export async function generateStaticParams() { ... }
+ */
+function analyzeRenderConfig(source) {
+    let renderMode = 'auto';
+    let revalidate;
+    const hasGenerateStaticParams = /export\s+(async\s+)?function\s+generateStaticParams\b/.test(source);
+    // Check export const dynamic = '...'
+    const dynamicMatch = source.match(/export\s+const\s+dynamic\s*=\s*['"](\w+(?:-\w+)?)['"]/);
+    if (dynamicMatch) {
+        const value = dynamicMatch[1];
+        if (value === 'force-static' || value === 'error') {
+            renderMode = 'static';
+        }
+        else if (value === 'force-dynamic') {
+            renderMode = 'dynamic';
+        }
+        // 'auto' stays as 'auto'
+    }
+    // Check export const revalidate = <number>
+    const revalidateMatch = source.match(/export\s+const\s+revalidate\s*=\s*(\d+|false)/);
+    if (revalidateMatch) {
+        const value = revalidateMatch[1];
+        if (value !== 'false') {
+            revalidate = parseInt(value, 10);
+        }
+    }
+    return { renderMode, revalidate, hasGenerateStaticParams };
 }
 /**
  * Determine component type from file name
@@ -107,13 +152,6 @@ function extractClientImports(source, appDir) {
     return imports;
 }
 /**
- * Generate unique module ID
- */
-function generateModuleId(relativePath) {
-    const normalized = relativePath.replace(/\\/g, '/').replace(/\.[jt]sx?$/, '');
-    return `server:${normalized}`;
-}
-/**
  * Scan directory recursively for server components
  */
 function scanForServerComponents(dir, appDir, components) {
@@ -135,9 +173,10 @@ function scanForServerComponents(dir, appDir, components) {
                 const source = fs_1.default.readFileSync(fullPath, 'utf-8');
                 // Only add if NOT a client component
                 if (!hasClientDirective(source)) {
-                    const relativePath = path_1.default.relative(appDir, fullPath);
-                    const moduleId = generateModuleId(relativePath);
+                    const relativePath = (0, component_identity_1.relativeComponentPath)(appDir, fullPath);
+                    const moduleId = (0, component_identity_1.createComponentId)('server', relativePath);
                     const metadata = analyzeMetadata(source);
+                    const renderConfig = analyzeRenderConfig(source);
                     components.push({
                         id: moduleId,
                         path: relativePath,
@@ -145,6 +184,9 @@ function scanForServerComponents(dir, appDir, components) {
                         type: getComponentType(item.name),
                         hasMetadata: metadata.hasMetadata,
                         hasGenerateMetadata: metadata.hasGenerateMetadata,
+                        hasGenerateStaticParams: renderConfig.hasGenerateStaticParams,
+                        renderMode: renderConfig.renderMode,
+                        revalidate: renderConfig.revalidate,
                         clientDependencies: extractClientImports(source, appDir),
                     });
                 }
@@ -164,9 +206,25 @@ function buildRoutes(components, appDir) {
     const layouts = components.filter((c) => c.type === 'layout');
     const loadings = components.filter((c) => c.type === 'loading');
     const errors = components.filter((c) => c.type === 'error');
+    const layoutsByDir = new Map();
+    for (const layout of layouts) {
+        const dir = path_1.default.dirname(layout.absolutePath);
+        const existing = layoutsByDir.get(dir);
+        const layoutBase = path_1.default.basename(layout.absolutePath).replace(/\.[jt]sx?$/, '');
+        const existingBase = existing
+            ? path_1.default.basename(existing.absolutePath).replace(/\.[jt]sx?$/, '')
+            : null;
+        // Canonical preference: root.* over layout.* in the same directory.
+        if (!existing || (layoutBase === 'root' && existingBase !== 'root')) {
+            layoutsByDir.set(dir, layout);
+        }
+    }
     for (const page of pages) {
         const pageDir = path_1.default.dirname(page.absolutePath);
         const relativePath = path_1.default.relative(appDir, pageDir);
+        if (hasReservedInternalSegment(relativePath)) {
+            continue;
+        }
         // Build URL pattern
         let pattern = '/' + relativePath.replace(/\\/g, '/');
         let routeType = 'static';
@@ -191,7 +249,7 @@ function buildRoutes(components, appDir) {
         const layoutPaths = [];
         let currentDir = pageDir;
         while (currentDir.startsWith(appDir)) {
-            const layout = layouts.find((l) => path_1.default.dirname(l.absolutePath) === currentDir);
+            const layout = layoutsByDir.get(currentDir);
             if (layout) {
                 layoutPaths.unshift(layout.absolutePath);
             }
@@ -203,6 +261,30 @@ function buildRoutes(components, appDir) {
         // Find loading and error in same directory
         const loading = loadings.find((l) => path_1.default.dirname(l.absolutePath) === pageDir);
         const error = errors.find((e) => path_1.default.dirname(e.absolutePath) === pageDir);
+        // Determine rendering mode from page exports
+        let renderMode = 'dynamic'; // default: dynamic
+        const pageRevalidate = page.revalidate;
+        const hasStaticParams = page.hasGenerateStaticParams;
+        const pageRenderMode = page.renderMode;
+        // Cast routeType to string — TS can't track mutations from .replace() callbacks
+        const rt = routeType;
+        if (pageRenderMode === 'static') {
+            renderMode = 'static';
+        }
+        else if (pageRenderMode === 'dynamic') {
+            renderMode = 'dynamic';
+        }
+        else if (pageRevalidate !== undefined && pageRevalidate > 0) {
+            renderMode = 'isr';
+        }
+        else if (rt === 'static' && pageRenderMode === 'auto') {
+            // Static URL pattern + auto mode = static by default
+            renderMode = 'static';
+        }
+        else if (rt === 'dynamic' && hasStaticParams) {
+            // Dynamic URL pattern + generateStaticParams = can be statically generated
+            renderMode = 'static';
+        }
         routes.push({
             pattern,
             pagePath: page.absolutePath,
@@ -210,6 +292,9 @@ function buildRoutes(components, appDir) {
             loadingPath: loading?.absolutePath,
             errorPath: error?.absolutePath,
             type: routeType,
+            renderMode,
+            revalidate: pageRevalidate,
+            hasGenerateStaticParams: hasStaticParams,
         });
     }
     // Sort routes: static first, then dynamic, then catch-all
@@ -229,8 +314,12 @@ function generateServerManifest(cwd, appDir) {
     const pathToId = {};
     for (const component of components) {
         serverModules[component.id] = component;
+        const normalizedRelativePath = (0, component_identity_1.normalizeComponentPath)(component.path);
+        const normalizedAbsolutePath = (0, component_identity_1.normalizeComponentPath)(component.absolutePath);
         pathToId[component.path] = component.id;
+        pathToId[normalizedRelativePath] = component.id;
         pathToId[component.absolutePath] = component.id;
+        pathToId[normalizedAbsolutePath] = component.id;
     }
     const routes = buildRoutes(components, appDir);
     // Get or generate build ID

@@ -43,8 +43,7 @@ const jsx_runtime_1 = require("react/jsx-runtime");
  * Similar to Next.js Head component.
  */
 const React = __importStar(require("react"));
-// Store for head elements (for SSR)
-const headElements = [];
+const generate_1 = require("../metadata/generate");
 /**
  * Head component - injects children into document head
  */
@@ -154,108 +153,6 @@ function Head({ children }) {
  * Generate head elements from metadata object
  */
 function generateMetadataHead(metadata) {
-    const elements = [];
-    // Title
-    if (metadata.title) {
-        const titleStr = typeof metadata.title === 'string'
-            ? metadata.title
-            : metadata.title.default;
-        elements.push((0, jsx_runtime_1.jsx)("title", { children: titleStr }, "title"));
-    }
-    // Description
-    if (metadata.description) {
-        elements.push((0, jsx_runtime_1.jsx)("meta", { name: "description", content: metadata.description }, "description"));
-    }
-    // Keywords
-    if (metadata.keywords) {
-        const keywordsStr = Array.isArray(metadata.keywords)
-            ? metadata.keywords.join(', ')
-            : metadata.keywords;
-        elements.push((0, jsx_runtime_1.jsx)("meta", { name: "keywords", content: keywordsStr }, "keywords"));
-    }
-    // Viewport
-    if (metadata.viewport) {
-        const viewportStr = typeof metadata.viewport === 'string'
-            ? metadata.viewport
-            : `width=${metadata.viewport.width || 'device-width'}, initial-scale=${metadata.viewport.initialScale || 1}`;
-        elements.push((0, jsx_runtime_1.jsx)("meta", { name: "viewport", content: viewportStr }, "viewport"));
-    }
-    // Theme color
-    if (metadata.themeColor) {
-        if (typeof metadata.themeColor === 'string') {
-            elements.push((0, jsx_runtime_1.jsx)("meta", { name: "theme-color", content: metadata.themeColor }, "themeColor"));
-        }
-    }
-    // Robots
-    if (metadata.robots) {
-        const robotsStr = typeof metadata.robots === 'string'
-            ? metadata.robots
-            : `${metadata.robots.index !== false ? 'index' : 'noindex'}, ${metadata.robots.follow !== false ? 'follow' : 'nofollow'}`;
-        elements.push((0, jsx_runtime_1.jsx)("meta", { name: "robots", content: robotsStr }, "robots"));
-    }
-    // Open Graph
-    if (metadata.openGraph) {
-        const og = metadata.openGraph;
-        if (og.title)
-            elements.push((0, jsx_runtime_1.jsx)("meta", { property: "og:title", content: og.title }, "og:title"));
-        if (og.description)
-            elements.push((0, jsx_runtime_1.jsx)("meta", { property: "og:description", content: og.description }, "og:description"));
-        if (og.url)
-            elements.push((0, jsx_runtime_1.jsx)("meta", { property: "og:url", content: og.url }, "og:url"));
-        if (og.siteName)
-            elements.push((0, jsx_runtime_1.jsx)("meta", { property: "og:site_name", content: og.siteName }, "og:site_name"));
-        if (og.type)
-            elements.push((0, jsx_runtime_1.jsx)("meta", { property: "og:type", content: og.type }, "og:type"));
-        if (og.locale)
-            elements.push((0, jsx_runtime_1.jsx)("meta", { property: "og:locale", content: og.locale }, "og:locale"));
-        if (og.images) {
-            og.images.forEach((img, i) => {
-                elements.push((0, jsx_runtime_1.jsx)("meta", { property: "og:image", content: img.url }, `og:image:${i}`));
-                if (img.width)
-                    elements.push((0, jsx_runtime_1.jsx)("meta", { property: "og:image:width", content: String(img.width) }, `og:image:width:${i}`));
-                if (img.height)
-                    elements.push((0, jsx_runtime_1.jsx)("meta", { property: "og:image:height", content: String(img.height) }, `og:image:height:${i}`));
-                if (img.alt)
-                    elements.push((0, jsx_runtime_1.jsx)("meta", { property: "og:image:alt", content: img.alt }, `og:image:alt:${i}`));
-            });
-        }
-    }
-    // Twitter
-    if (metadata.twitter) {
-        const tw = metadata.twitter;
-        if (tw.card)
-            elements.push((0, jsx_runtime_1.jsx)("meta", { name: "twitter:card", content: tw.card }, "twitter:card"));
-        if (tw.site)
-            elements.push((0, jsx_runtime_1.jsx)("meta", { name: "twitter:site", content: tw.site }, "twitter:site"));
-        if (tw.creator)
-            elements.push((0, jsx_runtime_1.jsx)("meta", { name: "twitter:creator", content: tw.creator }, "twitter:creator"));
-        if (tw.title)
-            elements.push((0, jsx_runtime_1.jsx)("meta", { name: "twitter:title", content: tw.title }, "twitter:title"));
-        if (tw.description)
-            elements.push((0, jsx_runtime_1.jsx)("meta", { name: "twitter:description", content: tw.description }, "twitter:description"));
-        if (tw.images) {
-            tw.images.forEach((img, i) => {
-                elements.push((0, jsx_runtime_1.jsx)("meta", { name: "twitter:image", content: img }, `twitter:image:${i}`));
-            });
-        }
-    }
-    // Canonical
-    if (metadata.alternates?.canonical) {
-        elements.push((0, jsx_runtime_1.jsx)("link", { rel: "canonical", href: metadata.alternates.canonical }, "canonical"));
-    }
-    // Manifest
-    if (metadata.manifest) {
-        elements.push((0, jsx_runtime_1.jsx)("link", { rel: "manifest", href: metadata.manifest }, "manifest"));
-    }
-    // Icons
-    if (metadata.icons) {
-        if (metadata.icons.icon) {
-            elements.push((0, jsx_runtime_1.jsx)("link", { rel: "icon", href: metadata.icons.icon }, "icon"));
-        }
-        if (metadata.icons.apple) {
-            elements.push((0, jsx_runtime_1.jsx)("link", { rel: "apple-touch-icon", href: metadata.icons.apple }, "apple-touch-icon"));
-        }
-    }
-    return (0, jsx_runtime_1.jsx)(Head, { children: elements });
+    return ((0, jsx_runtime_1.jsx)(Head, { children: (0, jsx_runtime_1.jsx)(generate_1.MetadataRenderer, { metadata: metadata }) }));
 }
 exports.default = Head;

@@ -48,7 +48,7 @@ const fs = __importStar(require("fs"));
 // Cache for component detection
 const clientComponentCache = new Map();
 /**
- * Check if a file is a client component by checking for 'client load' directive
+ * Check if a file is a client component by checking for 'use client' directive
  */
 function isClientComponent(filePath) {
     if (clientComponentCache.has(filePath)) {
@@ -56,8 +56,8 @@ function isClientComponent(filePath) {
     }
     try {
         const content = fs.readFileSync(filePath, 'utf-8');
-        const isClient = content.trimStart().startsWith("'client load'") ||
-            content.trimStart().startsWith('"client load"');
+        const isClient = content.trimStart().startsWith("'use client'") ||
+            content.trimStart().startsWith('"use client"');
         clientComponentCache.set(filePath, isClient);
         return isClient;
     }

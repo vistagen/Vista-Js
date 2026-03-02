@@ -1,43 +1,67 @@
 'use client';
 
-import React, { AnchorHTMLAttributes, useEffect, useRef, useCallback, useState } from 'react';
+import React, {
+  AnchorHTMLAttributes,
+  useEffect,
+  useRef,
+  useCallback,
+  useState,
+  useMemo,
+} from 'react';
 import { useRouter, usePathname } from './router';
+import { useRSCRouter } from './rsc-router';
 
-/* 
+/*
  * Vista Link Component
- * Next.js-compatible Link with prefetching and enhanced navigation
+ * Next.js 15-compatible Link with:
+ *  - IntersectionObserver viewport prefetch
+ *  - Hover + touchstart prefetch
+ *  - Flight-based RSC navigation (zero full-page reloads)
+ *  - Active link detection with aria-current + data-active
+ *  - External / hash / mailto / tel link passthrough
+ *  - Cmd/Ctrl+click native new-tab behaviour
  */
 
 type Url = string | { href: string; query?: Record<string, string>; hash?: string };
 
 export interface LinkProps extends Omit<AnchorHTMLAttributes<HTMLAnchorElement>, 'href'> {
-    href: Url;
-    as?: Url;
-    replace?: boolean;
-    scroll?: boolean;
-    shallow?: boolean;
-    passHref?: boolean;
-    prefetch?: boolean | 'auto' | null;
-    locale?: string | false;
-    legacyBehavior?: boolean;
-    onNavigate?: () => void;
+  /** Destination URL (string or URL object) */
+  href: Url;
+  /** Resolved URL override (like Next.js `as`) */
+  as?: Url;
+  /** Use history.replaceState instead of pushState */
+  replace?: boolean;
+  /** Scroll to top after navigation (default: true) */
+  scroll?: boolean;
+  /** Client-side only transition (no SSR refetch) */
+  shallow?: boolean;
+  /** Force href on child element */
+  passHref?: boolean;
+  /** Prefetch strategy: true = viewport+hover, 'auto' = hover-only, false/null = off */
+  prefetch?: boolean | 'auto' | null;
+  /** Locale for internationalised routing */
+  locale?: string | false;
+  /** Render as legacy <a> with child element */
+  legacyBehavior?: boolean;
+  /** Callback fired when navigation starts */
+  onNavigate?: () => void;
 }
 
 // Normalize href (string or object) to string
 const formatUrl = (url: Url): string => {
-    if (typeof url === 'string') return url;
-    if (typeof url === 'object' && url !== null) {
-        let result = url.href || '';
-        if (url.query) {
-            const params = new URLSearchParams(url.query).toString();
-            result += (result.includes('?') ? '&' : '?') + params;
-        }
-        if (url.hash) {
-            result += url.hash.startsWith('#') ? url.hash : `#${url.hash}`;
-        }
-        return result;
+  if (typeof url === 'string') return url;
+  if (typeof url === 'object' && url !== null) {
+    let result = url.href || '';
+    if (url.query) {
+      const params = new URLSearchParams(url.query).toString();
+      result += (result.includes('?') ? '&' : '?') + params;
     }
-    return '';
+    if (url.hash) {
+      result += url.hash.startsWith('#') ? url.hash : `#${url.hash}`;
+    }
+    return result;
+  }
+  return '';
 };
 
 // Set of URLs that have been prefetched
@@ -45,165 +69,253 @@ const prefetchedUrls = new Set<string>();
 
 // Prefetch a URL by creating a hidden link element
 const prefetchUrl = (url: string) => {
-    if (prefetchedUrls.has(url)) return;
-    if (typeof window === 'undefined') return;
+  if (prefetchedUrls.has(url)) return;
+  if (typeof window === 'undefined') return;
 
-    // Don't prefetch external URLs
-    if (url.startsWith('http://') || url.startsWith('https://')) {
-        if (!url.startsWith(window.location.origin)) return;
-    }
+  // Don't prefetch external URLs
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    if (!url.startsWith(window.location.origin)) return;
+  }
 
-    prefetchedUrls.add(url);
+  prefetchedUrls.add(url);
 
-    // Create prefetch link
-    const link = document.createElement('link');
-    link.rel = 'prefetch';
-    link.href = url;
-    link.as = 'document';
-    document.head.appendChild(link);
+  // Create prefetch link
+  const link = document.createElement('link');
+  link.rel = 'prefetch';
+  link.href = url;
+  link.as = 'document';
+  document.head.appendChild(link);
 };
 
-export const Link = React.forwardRef<HTMLAnchorElement, LinkProps>(({
-    href,
-    as,
-    replace,
-    scroll = true,
-    shallow,
-    passHref,
-    prefetch = true,
-    legacyBehavior,
-    children,
-    onClick,
-    onMouseEnter,
-    onNavigate,
-    ...props
-}, ref) => {
-    const router = useRouter();
-    const pathname = usePathname();
+/**
+ * Check whether a URL should be handled by the client-side router.
+ * Returns `false` for external, mailto:, tel:, hash-only, and download links.
+ */
+function isInternalUrl(url: string): boolean {
+  if (!url) return false;
+  // Hash-only links
+  if (url.startsWith('#')) return false;
+  // Protocol-relative or absolute external
+  if (url.startsWith('//')) return false;
+  // Non-http protocols
+  if (/^[a-z][a-z0-9+.-]*:/i.test(url)) {
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      if (typeof window !== 'undefined' && !url.startsWith(window.location.origin)) {
+        return false;
+      }
+      return true;
+    }
+    return false; // mailto:, tel:, ftp:, etc.
+  }
+  return true;
+}
+
+export const Link = React.forwardRef<HTMLAnchorElement, LinkProps>(
+  (
+    {
+      href,
+      as,
+      replace,
+      scroll = true,
+      shallow,
+      passHref,
+      prefetch = true,
+      legacyBehavior,
+      children,
+      onClick,
+      onMouseEnter,
+      onTouchStart,
+      onNavigate,
+      target,
+      ...props
+    },
+    ref
+  ) => {
+    // Try the RSC router first — if we're inside an RSCRouter, use
+    // Flight-based navigation. Otherwise fall back to the legacy router.
+    const rscRouter = useRSCRouter();
+    const legacyRouter = useRouter();
+    const pathname = rscRouter ? rscRouter.pathname : usePathname();
     const linkRef = useRef<HTMLAnchorElement | null>(null);
     const targetPath = formatUrl(as || href);
     const [isActive, setIsActive] = useState(false);
+    const internal = useMemo(() => isInternalUrl(targetPath), [targetPath]);
 
     // Combine refs
-    const setRefs = useCallback((node: HTMLAnchorElement | null) => {
+    const setRefs = useCallback(
+      (node: HTMLAnchorElement | null) => {
         linkRef.current = node;
         if (typeof ref === 'function') {
-            ref(node);
+          ref(node);
         } else if (ref) {
-            (ref as React.MutableRefObject<HTMLAnchorElement | null>).current = node;
+          (ref as React.MutableRefObject<HTMLAnchorElement | null>).current = node;
         }
-    }, [ref]);
+      },
+      [ref]
+    );
 
     // Check if link is active (current route)
     useEffect(() => {
-        if (typeof window !== 'undefined') {
-            setIsActive(pathname === targetPath);
-        }
+      if (typeof window !== 'undefined') {
+        // Exact match or starts-with for nested routes
+        const exact = pathname === targetPath;
+        const partial = targetPath !== '/' && pathname.startsWith(targetPath + '/');
+        setIsActive(exact || partial);
+      }
     }, [targetPath, pathname]);
 
-    // Prefetch on viewport intersection
+    // Prefetch on viewport intersection (skip for external links & auto mode)
     useEffect(() => {
-        if (!prefetch || prefetch === null) return;
-        if (typeof window === 'undefined') return;
+      if (!prefetch || prefetch === null || prefetch === 'auto') return;
+      if (!internal) return;
+      if (typeof window === 'undefined') return;
 
-        const element = linkRef.current;
-        if (!element) return;
+      const element = linkRef.current;
+      if (!element) return;
 
-        // Only prefetch visible links
-        const observer = new IntersectionObserver(
-            (entries) => {
-                entries.forEach((entry) => {
-                    if (entry.isIntersecting) {
-                        prefetchUrl(targetPath);
-                        observer.disconnect();
-                    }
-                });
-            },
-            {
-                rootMargin: '200px',
-                threshold: 0,
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              if (rscRouter) {
+                rscRouter.prefetch(targetPath);
+              } else {
+                prefetchUrl(targetPath);
+              }
+              observer.disconnect();
             }
-        );
+          });
+        },
+        {
+          rootMargin: '200px',
+          threshold: 0,
+        }
+      );
 
-        observer.observe(element);
+      observer.observe(element);
 
-        return () => observer.disconnect();
-    }, [prefetch, targetPath]);
+      return () => observer.disconnect();
+    }, [prefetch, targetPath, rscRouter, internal]);
 
     // Prefetch on hover
-    const handleMouseEnter = useCallback((e: React.MouseEvent<HTMLAnchorElement>) => {
+    const handleMouseEnter = useCallback(
+      (e: React.MouseEvent<HTMLAnchorElement>) => {
         if (onMouseEnter) onMouseEnter(e);
-        if (prefetch !== false && prefetch !== null) {
+        if (prefetch !== false && prefetch !== null && internal) {
+          if (rscRouter) {
+            rscRouter.prefetch(targetPath);
+          } else {
             prefetchUrl(targetPath);
+          }
         }
-    }, [onMouseEnter, prefetch, targetPath]);
+      },
+      [onMouseEnter, prefetch, targetPath, rscRouter, internal]
+    );
+
+    // Prefetch on touch (mobile devices)
+    const handleTouchStart = useCallback(
+      (e: React.TouchEvent<HTMLAnchorElement>) => {
+        if (onTouchStart) onTouchStart(e);
+        if (prefetch !== false && prefetch !== null && internal) {
+          if (rscRouter) {
+            rscRouter.prefetch(targetPath);
+          } else {
+            prefetchUrl(targetPath);
+          }
+        }
+      },
+      [onTouchStart, prefetch, targetPath, rscRouter, internal]
+    );
 
     // Handle navigation
-    const handleClick = useCallback((e: React.MouseEvent<HTMLAnchorElement>) => {
+    const handleClick = useCallback(
+      (e: React.MouseEvent<HTMLAnchorElement>) => {
         if (onClick) onClick(e);
 
         // Standard link behavior checks
         if (e.defaultPrevented) return;
-        if (e.button !== 0) return; // ignore right clicks
-        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; // ignore open in new tab
+        if (e.button !== 0) return; // only left-click
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; // modifier = new tab
+        if (target === '_blank') return; // explicit new tab
         if (!href) return;
-
-        // Check for external links
-        if (targetPath.startsWith('http://') || targetPath.startsWith('https://')) {
-            if (!targetPath.startsWith(window.location.origin)) {
-                return; // Let browser handle external links
-            }
-        }
+        if (!internal) return; // external / mailto / tel
 
         e.preventDefault();
 
-        // Call onNavigate callback
         if (onNavigate) onNavigate();
 
-        // Navigate
-        if (replace) {
-            router.replace(targetPath, { scroll });
+        // Use RSC router if available, otherwise legacy
+        if (rscRouter) {
+          if (replace) {
+            rscRouter.replace(targetPath, { scroll });
+          } else {
+            rscRouter.push(targetPath, { scroll });
+          }
         } else {
-            router.push(targetPath, { scroll });
+          if (replace) {
+            legacyRouter.replace(targetPath, { scroll });
+          } else {
+            legacyRouter.push(targetPath, { scroll });
+          }
         }
-    }, [onClick, href, targetPath, replace, scroll, router, onNavigate]);
+      },
+      [
+        onClick,
+        href,
+        targetPath,
+        replace,
+        scroll,
+        rscRouter,
+        legacyRouter,
+        onNavigate,
+        target,
+        internal,
+      ]
+    );
 
-    // Data attributes for styling active links
-    const dataProps = {
-        'data-active': isActive ? 'true' : undefined,
+    // Data + Aria attributes for styling active links
+    const dataProps: Record<string, string | undefined> = {
+      'data-active': isActive ? 'true' : undefined,
+      'aria-current': isActive ? 'page' : undefined,
     };
 
     return (
-        <a
-            href={targetPath}
-            onClick={handleClick}
-            onMouseEnter={handleMouseEnter}
-            ref={setRefs}
-            {...dataProps}
-            {...props}
-        >
-            {children}
-        </a>
+      <a
+        href={targetPath}
+        onClick={handleClick}
+        onMouseEnter={handleMouseEnter}
+        onTouchStart={handleTouchStart}
+        ref={setRefs}
+        target={target}
+        {...dataProps}
+        {...props}
+      >
+        {children}
+      </a>
     );
-});
+  }
+);
 
 Link.displayName = 'Link';
 
 /**
- * Hook to check link navigation status
+ * Hook to check link navigation status.
+ * Returns `{ pending: true }` while a Flight navigation is in progress.
  */
 export const useLinkStatus = () => {
-    // In a real implementation, this would track navigation state
-    const [pending, setPending] = useState(false);
-    return { pending };
+  const rscRouter = useRSCRouter();
+  if (rscRouter) {
+    return { pending: rscRouter.isPending };
+  }
+  return { pending: false };
 };
 
 /**
  * Hook to check if a path is active
  */
 export const useIsActive = (path: string): boolean => {
-    const pathname = usePathname();
-    return pathname === path;
+  const pathname = usePathname();
+  return pathname === path;
 };
 
 export default Link;

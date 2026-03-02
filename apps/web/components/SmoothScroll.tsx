@@ -1,4 +1,4 @@
-'client load';
+'use client';
 
 import { useEffect } from 'react';
 import Lenis from 'lenis';

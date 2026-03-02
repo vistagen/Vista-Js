@@ -2,7 +2,7 @@
 /**
  * Vista Flight Loader
  *
- * Rust-powered webpack loader that detects 'client load' directive
+ * Rust-powered webpack loader that detects 'use client' directive
  * and marks modules with RSC info for proper bundle separation.
  *
  * This is similar to Next.js's flight-loader but uses Vista's Rust scanner.
@@ -29,9 +29,9 @@ function hasClientDirective(source) {
         if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('/*')) {
             continue;
         }
-        // Check for 'client load' directive
-        if (trimmed === "'client load';" || trimmed === '"client load";' ||
-            trimmed === "'client load'" || trimmed === '"client load"') {
+        // Check for 'use client' directive
+        if (trimmed === "'use client';" || trimmed === '"use client";' ||
+            trimmed === "'use client'" || trimmed === '"use client"') {
             return true;
         }
         // If we hit an import or other statement first, it's not a client component
@@ -45,7 +45,7 @@ function hasClientDirective(source) {
 /**
  * Vista Flight Loader
  *
- * Marks modules with RSC info based on 'client load' directive.
+ * Marks modules with RSC info based on 'use client' directive.
  * Uses Rust for detection when available, falls back to TypeScript.
  */
 function vistaFlightLoader(source) {

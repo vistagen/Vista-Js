@@ -1,7 +1,11 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.default = Image;
-const jsx_runtime_1 = require("react/jsx-runtime");
-function Image({ src, alt, width, height, className, priority, ...props }) {
-    return ((0, jsx_runtime_1.jsx)("img", { src: src, alt: alt, width: width, height: height, className: className, loading: priority ? "eager" : "lazy", ...props }));
-}
+exports.Image = exports.default = void 0;
+// Backward-compatible entrypoint. Canonical implementation lives in `src/image/index.tsx`.
+var index_1 = require("./image/index");
+Object.defineProperty(exports, "default", { enumerable: true, get: function () { return __importDefault(index_1).default; } });
+var index_2 = require("./image/index");
+Object.defineProperty(exports, "Image", { enumerable: true, get: function () { return index_2.Image; } });

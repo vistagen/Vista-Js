@@ -17,4 +17,4 @@ export declare const imageConfigDefault: {
 export type ImageConfigComplete = typeof imageConfigDefault;
 export type ImageConfig = Partial<ImageConfigComplete>;
 export declare const VALID_LOADERS: readonly ["default", "imgix", "cloudinary", "akamai", "custom"];
-export type LoaderValue = typeof VALID_LOADERS[number];
+export type LoaderValue = (typeof VALID_LOADERS)[number];

@@ -1,17 +1,27 @@
-import "./globals.css";
-import { Metadata } from 'vista';
+import type { Metadata } from 'vista';
+import { Geist, Geist_Mono } from 'vista/font/google';
+import './globals.css';
 
-// Metadata export (optional)
+const geistSans = Geist({
+  variable: '--font-geist-sans',
+  subsets: ['latin'],
+});
+
+const geistMono = Geist_Mono({
+  variable: '--font-geist-mono',
+  subsets: ['latin'],
+});
+
 export const metadata: Metadata = {
-    title: 'My Vista App',
-    description: 'Built with Vista Framework',
+  title: 'My Vista App',
+  description: 'Built with Vista Framework',
 };
 
-export default function RootLayout({
-    children,
-}: Readonly<{
-    children: React.ReactNode;
-}>) {
-    // Layout is a simple wrapper - server handles html/head/body
-    return <>{children}</>;
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <head />
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>{children}</body>
+    </html>
+  );
 }

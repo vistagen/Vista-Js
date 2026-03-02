@@ -6,8 +6,8 @@
  *
  * Server Component Rules:
  * - By default, all components are Server Components
- * - Using 'client load' directive makes it a Client Component
- * - Using client hooks (useState, useEffect, etc.) without 'client load' is an ERROR
+ * - Using 'use client' directive makes it a Client Component
+ * - Using client hooks (useState, useEffect, etc.) without 'use client' is an ERROR
  *
  * Performance: Uses Rust-powered RSC scanner when available (~10-100x faster)
  */
@@ -20,7 +20,17 @@ import {
   convertScanResult,
 } from '../build/rsc/native-scanner';
 
+const RESERVED_INTERNAL_SEGMENTS = new Set(['[not-found]']);
+
+function hasReservedInternalSegment(relativePath: string): boolean {
+  return relativePath
+    .replace(/\\/g, '/')
+    .split('/')
+    .some((segment) => RESERVED_INTERNAL_SEGMENTS.has(segment));
+}
+
 // Try to load Rust NAPI bindings, fallback to JS if not available
+const _debug = !!process.env.VISTA_DEBUG;
 let rustNative: any = null;
 try {
   // Try multiple paths since we might be running from src or dist
@@ -36,23 +46,23 @@ try {
   for (const p of possiblePaths) {
     try {
       rustNative = require(p);
-      console.log(`[Vista] Loaded Rust native bindings from ${p}`);
+      if (_debug) console.log(`[Vista JS] Loaded Rust native bindings from ${p}`);
       break;
     } catch (e) {
       // Try next path
     }
   }
 
-  if (!rustNative) {
-    console.log('[Vista] Rust native bindings not found, using JS fallback');
+  if (!rustNative && _debug) {
+    console.log('[Vista JS] Rust native bindings not found, using JS fallback');
   }
 } catch (e) {
-  console.log('[Vista] Rust native bindings not found, using JS fallback');
+  if (_debug) console.log('[Vista JS] Rust native bindings not found, using JS fallback');
 }
 
 export interface RouteNode {
   segment: string;
-  kind: 'static' | 'dynamic' | 'catch-all';
+  kind: 'static' | 'dynamic' | 'catch-all' | 'optional-catch-all' | 'group';
   indexPath?: string;
   layoutPath?: string;
   loadingPath?: string;
@@ -61,12 +71,34 @@ export interface RouteNode {
   children: RouteNode[];
 }
 
+function isReservedRouteNode(node: RouteNode): boolean {
+  return node.kind === 'dynamic' && node.segment === 'not-found';
+}
+
+function pruneReservedRouteNodes(node: RouteNode): RouteNode {
+  return {
+    ...node,
+    children: node.children
+      .filter((child) => !isReservedRouteNode(child))
+      .map((child) => pruneReservedRouteNodes(child)),
+  };
+}
+
 export function getRouteTree(appDir: string): RouteNode {
   if (rustNative && rustNative.getRouteTree) {
-    return rustNative.getRouteTree(appDir);
+    const nativeTree = rustNative.getRouteTree(appDir);
+    return pruneReservedRouteNodes(nativeTree);
   }
   // JS Fallback - build route tree from file system
   return buildRouteTreeJS(appDir, appDir);
+}
+
+function classifySegment(segment: string): RouteNode['kind'] {
+  if (segment.startsWith('[[...') && segment.endsWith(']]')) return 'optional-catch-all';
+  if (segment.startsWith('[...')) return 'catch-all';
+  if (segment.startsWith('(') && segment.endsWith(')')) return 'group';
+  if (segment.startsWith('[')) return 'dynamic';
+  return 'static';
 }
 
 /**
@@ -74,9 +106,10 @@ export function getRouteTree(appDir: string): RouteNode {
  */
 function buildRouteTreeJS(dir: string, appDir: string): RouteNode {
   const segment = dir === appDir ? '' : path.basename(dir);
+  const kind = classifySegment(segment);
   const node: RouteNode = {
-    segment,
-    kind: segment.startsWith('[...') ? 'catch-all' : segment.startsWith('[') ? 'dynamic' : 'static',
+    segment: kind === 'group' ? '' : segment,
+    kind,
     children: [],
   };
 
@@ -90,7 +123,11 @@ function buildRouteTreeJS(dir: string, appDir: string): RouteNode {
     const fullPath = path.join(dir, entry.name);
 
     if (entry.isDirectory()) {
-      if (!entry.name.startsWith('.') && entry.name !== 'node_modules') {
+      if (
+        !entry.name.startsWith('.') &&
+        entry.name !== 'node_modules' &&
+        !RESERVED_INTERNAL_SEGMENTS.has(entry.name)
+      ) {
         node.children.push(buildRouteTreeJS(fullPath, appDir));
       }
     } else if (entry.isFile()) {
@@ -99,8 +136,13 @@ function buildRouteTreeJS(dir: string, appDir: string): RouteNode {
 
       if (basename === 'index' || basename === 'page') {
         node.indexPath = relativePath;
-      } else if (basename === 'layout' || basename === 'root') {
+      } else if (basename === 'root') {
         node.layoutPath = relativePath;
+      } else if (basename === 'layout') {
+        // Prefer root.* when both root.* and layout.* exist in same segment.
+        if (!node.layoutPath) {
+          node.layoutPath = relativePath;
+        }
       } else if (basename === 'loading') {
         node.loadingPath = relativePath;
       } else if (basename === 'error') {
@@ -119,7 +161,7 @@ export interface ClientDirectiveInfo {
   directive_line: number;
 }
 
-// Client-only hooks and APIs that require 'client load' directive
+// Client-only hooks and APIs that require 'use client' directive
 const CLIENT_HOOKS = [
   'useState',
   'useEffect',
@@ -197,35 +239,38 @@ export interface ScanError {
  * Fast check using Rust if available, else JS fallback
  */
 function isClientComponent(source: string): boolean {
-  if (rustNative) {
+  const trimmed = source.trimStart();
+  if (trimmed.startsWith("'use client'") || trimmed.startsWith('"use client"')) {
+    return true;
+  }
+
+  if (rustNative?.isClientComponent) {
     return rustNative.isClientComponent(source);
   }
-  // JS Fallback
-  const trimmed = source.trim();
-  return trimmed.startsWith("'client load'") || trimmed.startsWith('"client load"');
+
+  return false;
 }
 
 /**
  * Analyze directive with line number
  */
 function analyzeClientDirective(source: string): { isClient: boolean; directiveLine: number } {
-  if (rustNative) {
+  const lines = source.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line.length === 0) continue;
+
+    if (line.startsWith("'use client'") || line.startsWith('"use client"')) {
+      return { isClient: true, directiveLine: i + 1 };
+    }
+    break;
+  }
+
+  if (rustNative?.analyzeClientDirective) {
     return rustNative.analyzeClientDirective(source);
   }
-  // JS Fallback
-  const isClient = isClientComponent(source);
-  let directiveLine = 0;
-  if (isClient) {
-    const lines = source.split('\n');
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (line.startsWith("'client load'") || line.startsWith('"client load"')) {
-        directiveLine = i + 1;
-        break;
-      }
-    }
-  }
-  return { isClient, directiveLine };
+
+  return { isClient: false, directiveLine: 0 };
 }
 
 /**
@@ -333,12 +378,12 @@ function scanDirectory(dir: string, baseDir: string, errors: ScanError[]): Scann
       let hasError = false;
       let errorMessage: string | undefined;
 
-      // ERROR: Using client hooks without 'client load' directive
+      // ERROR: Using client hooks without 'use client' directive
       if (!analysis.isClient && clientHooksUsed.length > 0) {
         hasError = true;
         const hookList = clientHooksUsed.slice(0, 3).join(', ');
         const more = clientHooksUsed.length > 3 ? ` and ${clientHooksUsed.length - 3} more` : '';
-        errorMessage = `Server Component Error: You're using ${hookList}${more} in a Server Component.\n\nTo fix this, add 'client load' at the top of your file to make it a Client Component:\n\n'client load';\n\nimport ...`;
+        errorMessage = `Server Component Error: You're using ${hookList}${more} in a Server Component.\n\nTo fix this, add 'use client' at the top of your file to make it a Client Component:\n\n'use client';\n\nimport ...`;
 
         errors.push({
           file: path.relative(baseDir, fullPath),
@@ -361,6 +406,40 @@ function scanDirectory(dir: string, baseDir: string, errors: ScanError[]): Scann
   }
 
   return results;
+}
+
+function hasUseClientDirectiveInApp(appDir: string): boolean {
+  const queue: string[] = [appDir];
+
+  while (queue.length > 0) {
+    const currentDir = queue.pop() as string;
+    if (!fs.existsSync(currentDir)) continue;
+
+    const entries = fs.readdirSync(currentDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(currentDir, entry.name);
+
+      if (entry.isDirectory()) {
+        if (!entry.name.startsWith('.') && entry.name !== 'node_modules') {
+          queue.push(fullPath);
+        }
+        continue;
+      }
+
+      if (!entry.isFile() || !/\.(tsx?|jsx?)$/.test(entry.name)) continue;
+
+      try {
+        const source = fs.readFileSync(fullPath, 'utf-8').trimStart();
+        if (source.startsWith("'use client'") || source.startsWith('"use client"')) {
+          return true;
+        }
+      } catch {
+        // ignore file read failures and continue
+      }
+    }
+  }
+
+  return false;
 }
 
 /**
@@ -406,16 +485,18 @@ export function scanAppDirectory(appDir: string): ScanResult {
           hasError: false,
           errorMessage: undefined,
         })),
-        pages: nativeResult.pages.map((c) => ({
-          absolutePath: c.absolutePath,
-          relativePath: c.relativePath,
-          isClient: c.isClient,
-          directiveLine: c.directiveLine,
-          exports: c.exports,
-          clientHooksUsed: c.clientHooksUsed,
-          hasError: false,
-          errorMessage: undefined,
-        })),
+        pages: nativeResult.pages
+          .map((c) => ({
+            absolutePath: c.absolutePath,
+            relativePath: c.relativePath,
+            isClient: c.isClient,
+            directiveLine: c.directiveLine,
+            exports: c.exports,
+            clientHooksUsed: c.clientHooksUsed,
+            hasError: false,
+            errorMessage: undefined,
+          }))
+          .filter((page) => !hasReservedInternalSegment(page.relativePath)),
         errors: nativeResult.errors.map((e) => ({
           file: e.file,
           message: e.message,
@@ -423,7 +504,15 @@ export function scanAppDirectory(appDir: string): ScanResult {
         })),
       };
 
-      return result;
+      if (result.clientComponents.length > 0 || !hasUseClientDirectiveInApp(appDir)) {
+        return result;
+      }
+
+      if (process.env.VISTA_DEBUG) {
+        console.warn(
+          '[Vista RSC] Native scanner missed "use client" directives. Falling back to JS scanner.'
+        );
+      }
     }
   }
 
@@ -446,7 +535,9 @@ export function scanAppDirectory(appDir: string): ScanResult {
     if (basename === 'root' || basename === 'layout') {
       result.layouts.push(file);
     } else if (basename === 'index' || basename === 'page') {
-      result.pages.push(file);
+      if (!hasReservedInternalSegment(file.relativePath)) {
+        result.pages.push(file);
+      }
     } else if (basename === 'not-found') {
       result.notFound = file;
     } else if (basename === 'error') {

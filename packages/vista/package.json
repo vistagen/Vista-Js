@@ -1,6 +1,6 @@
 {
   "name": "@vistagenic/vista",
-  "version": "0.1.0-alpha.4",
+  "version": "0.1.0",
   "description": "The React Framework for Visionaries - Rust-powered SSR with Server Components",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -27,6 +27,7 @@
   ],
   "exports": {
     ".": {
+      "react-server": "./dist/react-server.js",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
@@ -35,6 +36,7 @@
       "default": "./dist/client/link.js"
     },
     "./image": {
+      "react-server": "./dist/image/react-server.js",
       "types": "./dist/image/index.d.ts",
       "default": "./dist/image/index.js"
     },
@@ -55,16 +57,33 @@
       "default": "./dist/client/script.js"
     },
     "./font": {
-      "types": "./dist/client/font.d.ts",
-      "default": "./dist/client/font.js"
+      "types": "./dist/font/index.d.ts",
+      "default": "./dist/font/index.js"
+    },
+    "./font/google": {
+      "types": "./dist/font/google.d.ts",
+      "default": "./dist/font/google.js"
+    },
+    "./font/local": {
+      "types": "./dist/font/local.d.ts",
+      "default": "./dist/font/local.js"
     },
     "./head": {
+      "react-server": "./dist/client/head.react-server.js",
       "types": "./dist/client/head.d.ts",
       "default": "./dist/client/head.js"
     },
     "./config": {
       "types": "./dist/config.d.ts",
       "default": "./dist/config.js"
+    },
+    "./client/rsc-router": {
+      "types": "./dist/client/rsc-router.d.ts",
+      "default": "./dist/client/rsc-router.js"
+    },
+    "./client/server-actions": {
+      "types": "./dist/client/server-actions.d.ts",
+      "default": "./dist/client/server-actions.js"
     },
     "./package.json": "./package.json"
   },
@@ -75,21 +94,24 @@
     "build": "tsc"
   },
   "dependencies": {
+    "@pmmmwh/react-refresh-webpack-plugin": "^0.5.11",
+    "@swc-node/register": "^1.9.0",
+    "@swc/core": "^1.4.0",
+    "chokidar": "^3.6.0",
+    "css-loader": "^7.1.2",
     "esbuild": "^0.24.2",
     "express": "^4.21.2",
+    "mini-css-extract-plugin": "^2.9.4",
+    "null-loader": "^4.0.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-refresh": "^0.14.0",
+    "react-server-dom-webpack": "^19.0.0",
+    "swc-loader": "^0.2.6",
     "ts-node": "^10.9.2",
     "webpack": "^5.90.0",
     "webpack-dev-middleware": "^7.0.0",
-    "webpack-hot-middleware": "^2.26.0",
-    "swc-loader": "^0.2.6",
-    "@swc/core": "^1.4.0",
-    "@swc-node/register": "^1.9.0",
-    "@pmmmwh/react-refresh-webpack-plugin": "^0.5.11",
-    "react-refresh": "^0.14.0",
-    "null-loader": "^4.0.1",
-    "chokidar": "^3.6.0"
+    "webpack-hot-middleware": "^2.26.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",

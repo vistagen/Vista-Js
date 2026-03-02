@@ -1,4 +1,5 @@
 import React from 'react';
+import { CREATE_VISTA_APP_COMMAND } from '../web/data/site';
 
 export function Hero() {
     return (
@@ -20,7 +21,7 @@ export function Hero() {
                     Get Started
                 </a>
                 <button className="px-8 py-3 glass hover:bg-white/10 text-white rounded-full font-medium transition-all hover:scale-105 active:scale-95 flex items-center gap-2">
-                    <span>npm install create-vista-app</span>
+                    <span>{CREATE_VISTA_APP_COMMAND}</span>
                 </button>
             </div>
         </section>

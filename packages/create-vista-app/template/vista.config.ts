@@ -1,7 +1,4 @@
-
-import type { VistaConfig } from 'vista/config';
-
-const config: VistaConfig = {
+const config = {
     images: {
         domains: ['example.com'],
     },

@@ -15,10 +15,23 @@ import {
   createClientWebpackConfig,
   type RSCCompilerOptions,
 } from '../build/rsc/compiler';
-import { createVistaDirectories, getBuildId } from '../build/manifest';
-import { generateClientManifest } from '../build/rsc/client-manifest';
+import {
+  createVistaDirectories,
+  getBuildId,
+  writeCanonicalVistaArtifacts,
+} from '../build/manifest';
+import { generateClientManifestWithRoots } from '../build/rsc/client-manifest';
 import { generateServerManifest } from '../build/rsc/server-manifest';
 import { scanAppDirectory, isNativeAvailable, getVersion } from './file-scanner';
+import { loadConfig, resolveStructureValidationConfig } from '../config';
+import {
+  validateAppStructure,
+  type StructureValidationResult,
+} from '../server/structure-validator';
+import { generateStaticPages } from '../server/static-generator';
+import { logValidationResult, formatBuildFailTable } from '../server/structure-log';
+
+const _debug = !!process.env.VISTA_DEBUG;
 
 /**
  * Run PostCSS for CSS compilation
@@ -26,14 +39,17 @@ import { scanAppDirectory, isNativeAvailable, getVersion } from './file-scanner'
 function runPostCSS(cwd: string, vistaDir: string): void {
   const globalsCss = path.join(cwd, 'app/globals.css');
   if (fs.existsSync(globalsCss)) {
-    console.log('[Vista RSC] Building CSS with PostCSS...');
+    if (_debug) console.log('[Vista JS RSC] Building CSS with PostCSS...');
     const { execSync } = require('child_process');
     try {
       const cssOut = path.join(vistaDir, 'client.css');
-      execSync(`npx postcss app/globals.css -o "${cssOut}"`, { stdio: 'inherit', cwd });
-      console.log('[Vista RSC] CSS Built Successfully!');
+      execSync(`npx postcss app/globals.css -o "${cssOut}"`, {
+        stdio: _debug ? 'inherit' : 'pipe',
+        cwd,
+      });
+      if (_debug) console.log('[Vista JS RSC] CSS Built Successfully!');
     } catch (cssErr) {
-      console.error('[Vista RSC] CSS Build failed (PostCSS error).');
+      console.error('[Vista JS RSC] CSS Build failed (PostCSS error).');
     }
   }
 }
@@ -42,136 +58,80 @@ function runPostCSS(cwd: string, vistaDir: string): void {
  * Generate the RSC-aware client entry file
  */
 function generateRSCClientEntry(cwd: string, vistaDir: string): void {
-  const clientManifestPath = path.join(vistaDir, 'client-manifest.json');
-
-  let clientImports = '';
-  let clientComponents = '{}';
-
-  if (fs.existsSync(clientManifestPath)) {
-    const manifest = JSON.parse(fs.readFileSync(clientManifestPath, 'utf-8'));
-
-    // Generate imports for all client components
-    const imports: string[] = [];
-    const components: string[] = [];
-
-    Object.values(manifest.clientModules).forEach((entry: any, index: number) => {
-      const varName = `ClientComponent_${index}`;
-      const relativePath = './' + path.relative(vistaDir, entry.absolutePath).replace(/\\/g, '/');
-      imports.push(`import ${varName} from '${relativePath}';`);
-      components.push(`'${entry.id}': ${varName}`);
-    });
-
-    clientImports = imports.join('\n');
-    clientComponents = `{\n    ${components.join(',\n    ')}\n}`;
-  }
-
   const clientEntryContent = `/**
  * Vista RSC Client Entry
- * 
+ *
  * This file is auto-generated. Do not edit directly.
- * It handles selective hydration of client components.
+ * It hydrates using React Flight data from /rsc and enables
+ * RSC-aware client-side navigation via RSCRouter.
  */
 
 import * as React from 'react';
-import { createRoot } from 'react-dom/client';
+import { hydrateRoot } from 'react-dom/client';
+import { createFromFetch } from 'react-server-dom-webpack/client';
+import { RSCRouter } from 'vista/client/rsc-router';
+import { callServer } from 'vista/client/server-actions';
 
-// Import all client components
-${clientImports}
-
-// Client component registry
-const clientComponents = ${clientComponents};
-
-// Hydration logic
-interface ClientReference {
-    id: string;
-    mountId: string;
-    props: Record<string, any>;
-    chunkUrl: string;
-    exportName: string;
+const hydrateDocument = (window as any).__VISTA_HYDRATE_DOCUMENT__ === true;
+const rootElement = hydrateDocument ? document : document.getElementById('root');
+if (!rootElement) {
+  throw new Error('Missing #root element for hydration.');
 }
 
-function deserializeProps(props: Record<string, any>): Record<string, any> {
-    const result: Record<string, any> = {};
-    for (const [key, value] of Object.entries(props)) {
-        if (value && typeof value === 'object' && value.__type) {
-            switch (value.__type) {
-                case 'Date':
-                    result[key] = new Date(value.value);
-                    break;
-                case 'undefined':
-                    result[key] = undefined;
-                    break;
-                default:
-                    result[key] = value;
-            }
-        } else {
-            result[key] = value;
-        }
-    }
-    return result;
-}
+const pathname = window.location.pathname;
+const search = window.location.search;
+const initialResponse = createFromFetch(
+  fetch(\`/rsc\${pathname}\${search}\`, { headers: { Accept: 'text/x-component' } }),
+  { callServer }
+) as Promise<React.ReactNode>;
 
-async function hydrateClientComponents() {
-    const references: ClientReference[] = (window as any).__VISTA_CLIENT_REFERENCES__ || [];
-    
-    console.log('[Vista RSC] Hydrating', references.length, 'client component(s)');
-    
-    for (const ref of references) {
-        try {
-            const mountPoint = document.getElementById(ref.mountId);
-            if (!mountPoint) {
-                console.warn('[Vista RSC] Mount point not found:', ref.mountId);
-                continue;
-            }
-            
-            // Get component from registry
-            let Component = clientComponents[ref.id];
-            
-            if (!Component) {
-                // Try dynamic import
-                try {
-                    const module = await import(/* webpackIgnore: true */ ref.chunkUrl);
-                    Component = module[ref.exportName] || module.default;
-                } catch (e) {
-                    console.error('[Vista RSC] Failed to load component:', ref.id, e);
-                    continue;
-                }
-            }
-            
-            if (!Component) {
-                console.error('[Vista RSC] Component not found:', ref.id);
-                continue;
-            }
-            
-            const props = deserializeProps(ref.props);
-            
-            // Use createRoot since we render a placeholder on server
-            const root = createRoot(mountPoint);
-            root.render(React.createElement(Component, props));
-            
-            mountPoint.setAttribute('data-hydrated', 'true');
-            
-        } catch (e) {
-            console.error('[Vista RSC] Hydration error:', ref.id, e);
-        }
-    }
-}
+hydrateRoot(
+  rootElement as Document | Element,
+  React.createElement(RSCRouter, {
+    initialResponse,
+    initialPathname: pathname,
+  })
+);
 
-// Initialize
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', hydrateClientComponents);
-} else {
-    hydrateClientComponents();
-}
-
-// HMR Support
 if ((module as any).hot) {
-    (module as any).hot.accept();
+  (module as any).hot.accept();
 }
+
+// Vista live-reload: listen for server component changes via SSE
+(function connectReload() {
+  const es = new EventSource('/__vista_reload');
+  es.onmessage = (e) => {
+    if (e.data === 'reload') {
+      window.location.reload();
+    } else {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'error') {
+          console.error('[vista] Build error:', msg.message);
+        }
+      } catch {}
+    }
+  };
+  es.onerror = () => {
+    es.close();
+    setTimeout(connectReload, 3000);
+  };
+})();
 `;
 
   fs.writeFileSync(path.join(vistaDir, 'rsc-client.tsx'), clientEntryContent);
-  console.log('[Vista RSC] Generated client entry file');
+  if (_debug) console.log('[vista:build] Generated RSC client entry file');
+}
+
+function syncReactServerManifests(vistaDir: string): void {
+  const canonicalPath = path.join(vistaDir, 'react-server-manifest.json');
+  const legacyPath = path.join(vistaDir, 'react-ssr-manifest.json');
+
+  if (fs.existsSync(canonicalPath) && !fs.existsSync(legacyPath)) {
+    fs.copyFileSync(canonicalPath, legacyPath);
+  } else if (fs.existsSync(legacyPath) && !fs.existsSync(canonicalPath)) {
+    fs.copyFileSync(legacyPath, canonicalPath);
+  }
 }
 
 /**
@@ -183,47 +143,98 @@ export async function buildRSC(watch: boolean = false): Promise<{
 }> {
   const cwd = process.cwd();
   const appDir = path.join(cwd, 'app');
+  const componentsDir = path.join(cwd, 'components');
+  let clientReferenceFiles: string[] = [];
 
-  console.log('');
-  console.log('╔══════════════════════════════════════════════════════════════╗');
-  console.log('║           Vista RSC Build System (React Server Components)   ║');
-  console.log('╚══════════════════════════════════════════════════════════════╝');
-  console.log('');
+  if (_debug) {
+    console.log('');
+    console.log('╔══════════════════════════════════════════════════════════════╗');
+    console.log('║           Vista JS RSC Build System (React Server Components)   ║');
+    console.log('╚══════════════════════════════════════════════════════════════╝');
+    console.log('');
+  }
 
   // Create .vista directory structure
-  const vistaDirs = createVistaDirectories(cwd);
+  const vistaDirs = createVistaDirectories(cwd, 'rsc');
   const buildId = getBuildId(vistaDirs.root, !watch);
 
-  console.log(`[Vista RSC] Build ID: ${buildId}`);
-  console.log(`[Vista RSC] Mode: ${watch ? 'Development (Watch)' : 'Production'}`);
-  console.log('');
+  if (_debug) {
+    console.log(`[vista:build] Build ID: ${buildId}`);
+    console.log(`[vista:build] Mode: ${watch ? 'Development (Watch)' : 'Production'}`);
+    console.log('');
+  }
+
+  // ========================================================================
+  // Pre-build Structure Validation
+  // ========================================================================
+  const vistaConfig = loadConfig(cwd);
+  const structureConfig = resolveStructureValidationConfig(vistaConfig);
+
+  if (structureConfig.enabled) {
+    const result: StructureValidationResult = validateAppStructure({ cwd });
+    logValidationResult(result, structureConfig.logLevel);
+
+    if (result.state === 'error' && structureConfig.mode === 'strict') {
+      console.error(formatBuildFailTable(result));
+      process.exit(1);
+    }
+  }
 
   // Scan app directory
   if (fs.existsSync(appDir)) {
-    console.log(
-      `[Vista RSC] Using ${isNativeAvailable() ? 'Rust native' : 'JS fallback'} scanner (v${getVersion()})`
-    );
+    if (_debug) {
+      console.log(
+        `[Vista JS RSC] Using ${isNativeAvailable() ? 'Rust native' : 'JS fallback'} scanner (v${getVersion()})`
+      );
+    }
 
     const scanResult = scanAppDirectory(appDir);
+    clientReferenceFiles = scanResult.clientComponents.map((component) => component.absolutePath);
+    let componentsScanResult: ReturnType<typeof scanAppDirectory> | null = null;
 
-    console.log(`[Vista RSC] Found ${scanResult.serverComponents.length} server components`);
-    console.log(
-      `[Vista RSC] Found ${scanResult.clientComponents.length} client components ('client load')`
-    );
-    console.log('');
+    if (fs.existsSync(componentsDir)) {
+      componentsScanResult = scanAppDirectory(componentsDir);
+      clientReferenceFiles = Array.from(
+        new Set([
+          ...clientReferenceFiles,
+          ...componentsScanResult.clientComponents.map((component) => component.absolutePath),
+        ])
+      );
+    }
+
+    if (_debug) {
+      console.log(`[Vista JS RSC] Found ${scanResult.serverComponents.length} server components`);
+      console.log(
+        `[Vista JS RSC] Found ${scanResult.clientComponents.length} client components ('use client') in app/`
+      );
+      if (componentsScanResult) {
+        console.log(
+          `[Vista JS RSC] Found ${componentsScanResult.clientComponents.length} client components ('use client') in components/`
+        );
+      }
+      console.log(`[Vista JS RSC] Total client reference modules: ${clientReferenceFiles.length}`);
+      console.log('');
+    }
 
     // List client components
-    if (scanResult.clientComponents.length > 0) {
-      console.log('[Vista RSC] Client Components (will be hydrated on browser):');
+    if (scanResult.clientComponents.length > 0 && _debug) {
+      console.log('[Vista JS RSC] Client Components (will be hydrated on browser):');
       scanResult.clientComponents.forEach((c) => {
         console.log(`  ✓ ${c.relativePath}`);
       });
       console.log('');
     }
+    if (componentsScanResult && componentsScanResult.clientComponents.length > 0 && _debug) {
+      console.log('[Vista JS RSC] Components Directory Client Components:');
+      componentsScanResult.clientComponents.forEach((c) => {
+        console.log(`  ✓ components/${c.relativePath}`);
+      });
+      console.log('');
+    }
 
     // List server components (first few)
-    if (scanResult.serverComponents.length > 0) {
-      console.log('[Vista RSC] Server Components (0kb client bundle contribution):');
+    if (scanResult.serverComponents.length > 0 && _debug) {
+      console.log('[Vista JS RSC] Server Components (0kb client bundle contribution):');
       scanResult.serverComponents.slice(0, 5).forEach((c) => {
         console.log(`  • ${c.relativePath}`);
       });
@@ -233,19 +244,27 @@ export async function buildRSC(watch: boolean = false): Promise<{
       console.log('');
     }
 
-    // Check for errors (using client hooks without 'client load')
-    if (scanResult.errors.length > 0) {
+    // Check for errors (using client hooks without 'use client')
+    const scanErrors = [
+      ...scanResult.errors,
+      ...(componentsScanResult?.errors || []).map((error) => ({
+        ...error,
+        file: `components/${error.file}`,
+      })),
+    ];
+
+    if (scanErrors.length > 0) {
       console.log('\x1b[41m\x1b[37m ERROR \x1b[0m \x1b[31mServer Component Violations\x1b[0m');
       console.log('');
 
-      for (const error of scanResult.errors) {
+      for (const error of scanErrors) {
         console.log(`\x1b[31m✗\x1b[0m ${error.file}`);
         console.log(
           `  Using: \x1b[33m${error.hooks.slice(0, 3).join(', ')}\x1b[0m in a Server Component`
         );
         console.log('');
         console.log(
-          `  \x1b[36mTo fix:\x1b[0m Add \x1b[33m'client load'\x1b[0m at the top of the file`
+          `  \x1b[36mTo fix:\x1b[0m Add \x1b[33m'use client'\x1b[0m at the top of the file`
         );
         console.log('');
       }
@@ -258,68 +277,120 @@ export async function buildRSC(watch: boolean = false): Promise<{
   }
 
   // Generate manifests
-  console.log('[Vista RSC] Generating manifests...');
+  if (_debug) console.log('[vista:build] Generating manifests...');
 
-  const clientManifest = generateClientManifest(cwd, appDir);
+  const additionalClientRoots = fs.existsSync(componentsDir)
+    ? [{ dir: componentsDir, prefix: 'components/' }]
+    : [];
+  const clientManifest = generateClientManifestWithRoots(cwd, appDir, additionalClientRoots);
   fs.writeFileSync(
     path.join(vistaDirs.root, 'client-manifest.json'),
     JSON.stringify(clientManifest, null, 2)
   );
-  console.log(
-    `  ✓ client-manifest.json (${Object.keys(clientManifest.clientModules).length} modules)`
-  );
+  if (_debug) {
+    console.log(
+      `  ✓ client-manifest.json (${Object.keys(clientManifest.clientModules).length} modules)`
+    );
+  }
 
   const serverManifest = generateServerManifest(cwd, appDir);
   fs.writeFileSync(
     path.join(vistaDirs.server, 'server-manifest.json'),
     JSON.stringify(serverManifest, null, 2)
   );
-  console.log(
-    `  ✓ server-manifest.json (${Object.keys(serverManifest.serverModules).length} modules, ${serverManifest.routes.length} routes)`
+  if (_debug) {
+    console.log(
+      `  ✓ server-manifest.json (${Object.keys(serverManifest.serverModules).length} modules, ${serverManifest.routes.length} routes)`
+    );
+    console.log('');
+  }
+
+  writeCanonicalVistaArtifacts(
+    cwd,
+    vistaDirs.root,
+    buildId,
+    serverManifest.routes.map((route) => ({
+      pattern: route.pattern,
+      pagePath: route.pagePath,
+      type: route.type,
+    }))
   );
-  console.log('');
 
   // Generate client entry
   generateRSCClientEntry(cwd, vistaDirs.root);
 
   // Create webpack configs
-  const options: RSCCompilerOptions = { cwd, isDev: watch, vistaDirs, buildId };
+  const options: RSCCompilerOptions = {
+    cwd,
+    isDev: watch,
+    vistaDirs,
+    buildId,
+    clientReferenceFiles,
+  };
 
   // Build CSS
   runPostCSS(cwd, vistaDirs.root);
 
   if (watch) {
     // Development mode - return compilers for middleware
-    console.log('[Vista RSC] Creating development compilers...');
+    if (_debug) console.log('[Vista JS RSC] Creating development compilers...');
+
+    // Clear stale webpack cache.  ReactFlightWebpackPlugin adds
+    // AsyncDependenciesBlock entries that can't be serialised by webpack's
+    // pack file cache strategy.  A stale cache that was written *before* the
+    // plugin ran will skip the parser hook entirely, causing empty Flight
+    // manifests.  Clearing on every dev-start is the safest approach –
+    // first-compile is ~1s longer but guarantees correct manifests.
+    const cacheDir = path.join(vistaDirs.root, 'cache');
+    if (fs.existsSync(cacheDir)) {
+      fs.rmSync(cacheDir, { recursive: true, force: true });
+      if (_debug) console.log('[Vista JS RSC] Cleared stale webpack cache');
+    }
+
+    // Write stub Flight manifests so upstream can start before first webpack compile.
+    // ReactFlightWebpackPlugin will overwrite these on first successful compilation.
+    const stubManifests = [
+      path.join(vistaDirs.root, 'react-client-manifest.json'),
+      path.join(vistaDirs.root, 'react-server-manifest.json'),
+      path.join(vistaDirs.root, 'react-ssr-manifest.json'),
+    ];
+    for (const manifestPath of stubManifests) {
+      if (!fs.existsSync(manifestPath)) {
+        fs.writeFileSync(manifestPath, '{}');
+      }
+    }
 
     const clientConfig = createClientWebpackConfig(options);
     const clientCompiler = webpack(clientConfig);
+    syncReactServerManifests(vistaDirs.root);
 
     // Watch for CSS changes
     try {
       const chokidar = require('chokidar');
       chokidar.watch(path.join(cwd, 'app/**/*.css'), { ignoreInitial: true }).on('change', () => {
-        console.log('[Vista RSC] CSS changed, rebuilding...');
+        if (_debug) console.log('[Vista JS RSC] CSS changed, rebuilding...');
         runPostCSS(cwd, vistaDirs.root);
       });
     } catch (e) {
       // chokidar not installed
     }
 
-    console.log('[Vista RSC] Ready for development');
-    console.log('');
+    if (_debug) {
+      console.log('[Vista JS RSC] Ready for development');
+      console.log('');
+    }
 
     return { serverCompiler: null, clientCompiler };
   } else {
     // Production build
-    console.log('[Vista RSC] Building for production...');
+    console.log('[Vista JS RSC] Building for production...');
     console.log('');
 
     const serverConfig = createServerWebpackConfig(options);
     const clientConfig = createClientWebpackConfig(options);
 
     // Build server bundle
-    console.log('[Vista RSC] Building server bundle...');
+    console.log('[Vista JS RSC] Building server bundle...');
     await new Promise<void>((resolve, reject) => {
       webpack(serverConfig).run((err, stats) => {
         if (err) {
@@ -332,13 +403,13 @@ export async function buildRSC(watch: boolean = false): Promise<{
           reject(new Error('Server compilation failed'));
           return;
         }
-        console.log('[Vista RSC] Server bundle complete');
+        console.log('[Vista JS RSC] Server bundle complete');
         resolve();
       });
     });
 
     // Build client bundle
-    console.log('[Vista RSC] Building client bundle...');
+    console.log('[Vista JS RSC] Building client bundle...');
     await new Promise<void>((resolve, reject) => {
       webpack(clientConfig).run((err, stats) => {
         if (err) {
@@ -351,13 +422,43 @@ export async function buildRSC(watch: boolean = false): Promise<{
           reject(new Error('Client compilation failed'));
           return;
         }
-        console.log('[Vista RSC] Client bundle complete');
+        console.log('[Vista JS RSC] Client bundle complete');
         console.log(stats?.toString('minimal'));
+        syncReactServerManifests(vistaDirs.root);
         resolve();
       });
     });
 
+    // ------------------------------------------------------------------
+    // Static Generation (SSG / ISR)
+    // ------------------------------------------------------------------
+    console.log('[Vista JS RSC] Running static generation...');
+    const ssgResult = await generateStaticPages({
+      cwd,
+      vistaDirRoot: vistaDirs.root,
+      manifest: serverManifest,
+      isDev: false,
+      buildId,
+    });
+
+    if (ssgResult.pagesGenerated > 0) {
+      console.log(
+        `[Vista JS RSC] Pre-rendered ${ssgResult.pagesGenerated} page(s): ${ssgResult.generatedPaths.join(', ')}`
+      );
+    }
+    if (ssgResult.failedPaths.length > 0) {
+      console.warn(
+        `[Vista JS RSC] Failed to pre-render ${ssgResult.failedPaths.length} page(s):`,
+        ssgResult.failedPaths.map((f) => `${f.path} (${f.error})`).join(', ')
+      );
+    }
+
+    // Write the real prerender manifest (overwrite the empty stub)
+    const prerenderManifestPath = path.join(vistaDirs.root, 'prerender-manifest.json');
+    fs.writeFileSync(prerenderManifestPath, JSON.stringify(ssgResult.manifest, null, 2));
+    console.log('[Vista JS RSC] Wrote prerender-manifest.json');
     console.log('');
+
     console.log('╔══════════════════════════════════════════════════════════════╗');
     console.log('║                    Build Complete! 🎉                        ║');
     console.log('╚══════════════════════════════════════════════════════════════╝');

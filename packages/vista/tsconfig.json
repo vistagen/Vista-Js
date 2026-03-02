@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "CommonJS",
-    "moduleResolution": "node",
+    "module": "Node16",
+    "moduleResolution": "node16",
     "jsx": "react-jsx",
     "outDir": "./dist",
     "rootDir": "./src",
@@ -12,7 +12,6 @@
     "allowSyntheticDefaultImports": true,
     "skipLibCheck": true,
     "declaration": true,
-    "downlevelIteration": true,
     "resolveJsonModule": true
   },
   "include": ["src/**/*"]

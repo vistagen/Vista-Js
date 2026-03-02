@@ -1,10 +1,11 @@
-'client load';
+'use client';
 import { useState } from 'react';
 import { Copy, Check, Terminal } from 'lucide-react';
+import { CREATE_VISTA_APP_COMMAND } from '../web/data/site';
 
 export default function CopyCommand() {
     const [copied, setCopied] = useState(false);
-    const command = 'npx create-vista-app';
+    const command = CREATE_VISTA_APP_COMMAND;
 
     const handleCopy = async () => {
         try {

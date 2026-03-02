@@ -1,3 +1,5 @@
+import { CREATE_VISTA_APP_COMMAND } from './site';
+
 export const heroContent = {
     title: {
         prefix: "The React Framework for",
@@ -10,6 +12,6 @@ export const heroContent = {
         suffix: ", Vista provides a modern, optimized foundation for your ideas. Perfect for learning, experimenting, and shipping."
     },
     cli: {
-        command: "npx create-vista-app"
+        command: CREATE_VISTA_APP_COMMAND
     }
 };

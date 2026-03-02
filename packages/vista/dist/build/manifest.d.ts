@@ -22,8 +22,10 @@ export interface VistaDirs {
 }
 /**
  * Create the .vista directory structure.
+ * In legacy mode, only creates root + cache (no empty server/static dirs).
+ * In RSC mode, creates the full structure for server/client bundles.
  */
-export declare function createVistaDirectories(cwd: string): VistaDirs;
+export declare function createVistaDirectories(cwd: string, mode?: 'legacy' | 'rsc'): VistaDirs;
 export interface BuildManifest {
     buildId: string;
     polyfillFiles: string[];
@@ -32,10 +34,35 @@ export interface BuildManifest {
     rootMainFiles: string[];
     pages: Record<string, string[]>;
 }
+export interface ArtifactManifest {
+    schemaVersion: number;
+    buildId: string;
+    generatedAt: string;
+    manifests: {
+        buildManifest: string;
+        routesManifest: string;
+        appPathRoutesManifest: string;
+        prerenderManifest: string;
+        requiredServerFiles: string;
+        reactClientManifest: string;
+        reactServerManifest: string;
+    };
+}
 /**
  * Generate build-manifest.json
  */
 export declare function generateBuildManifest(vistaDir: string, buildId: string, pages?: Record<string, string[]>): BuildManifest;
+interface RouteLike {
+    pattern: string;
+    pagePath: string;
+    type?: 'static' | 'dynamic' | 'catch-all';
+}
+export declare function generateAppPathRoutesManifest(vistaDir: string, routes?: RouteLike[]): Record<string, string>;
+export declare function generatePrerenderManifest(vistaDir: string): void;
+export declare function generateRequiredServerFilesManifest(cwd: string, vistaDir: string): void;
+export declare function ensureJsonFile(vistaDir: string, relativePath: string, fallback?: unknown): void;
+export declare function writeArtifactManifest(vistaDir: string, buildId: string): ArtifactManifest;
+export declare function writeCanonicalVistaArtifacts(cwd: string, vistaDir: string, buildId: string, routes?: RouteLike[]): ArtifactManifest;
 export interface RouteInfo {
     page: string;
     regex: string;
@@ -65,7 +92,7 @@ export interface ClientComponentsManifest {
     clientModules: Record<string, ClientComponentInfo>;
 }
 /**
- * Generate manifest of client components (files with 'client load').
+ * Generate manifest of client components (files with 'use client').
  */
 export declare function generateClientComponentsManifest(vistaDir: string, buildId: string, clientModules?: Record<string, ClientComponentInfo>): ClientComponentsManifest;
 export interface ServerComponentInfo {
@@ -93,3 +120,4 @@ export declare function getWebpackCacheConfig(vistaDir: string, buildId: string,
  * Clean old cache entries (keeps last N builds).
  */
 export declare function cleanOldCache(vistaDir: string, keepBuilds?: number): void;
+export {};

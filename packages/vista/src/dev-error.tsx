@@ -1,6 +1,6 @@
 /**
  * Vista Error Overlay
- * 
+ *
  * A standalone error overlay that works without React hydration.
  * Uses inline styles and vanilla JS for interactivity.
  */
@@ -12,336 +12,461 @@ import React from 'react';
 // ============================================================================
 
 export interface VistaError {
-    type: 'build' | 'runtime' | 'hydration';
-    message: string;
-    stack?: string;
-    file?: string;
-    line?: number;
-    column?: number;
-    codeFrame?: string;
+  type: 'build' | 'runtime' | 'hydration';
+  message: string;
+  stack?: string;
+  file?: string;
+  line?: number;
+  column?: number;
+  codeFrame?: string;
 }
 
 interface ErrorOverlayProps {
-    errors: VistaError[];
+  errors: VistaError[];
 }
 
 // ============================================================================
 // Inline CSS (no external dependencies)
 // ============================================================================
 
-const INLINE_STYLES = `
-<style>
+const OVERLAY_STYLES = `
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { 
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background: #0a0a0a; 
-    color: #ededed;
-    min-height: 100vh;
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #0a0a0a;
+  color: #ededed;
+  min-height: 100vh;
 }
 .vista-error-container {
-    min-height: 100vh;
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    padding: 40px 20px;
+  min-height: 100vh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px 20px;
 }
 .vista-error-dialog {
-    width: 100%;
-    max-width: 800px;
-    background: #0a0a0a;
-    border: 1px solid #333;
-    border-radius: 12px;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-    overflow: hidden;
+  width: 100%;
+  max-width: 800px;
+  background: #0a0a0a;
+  border: 1px solid #333;
+  border-radius: 12px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
 }
 .vista-error-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px 20px;
-    background: #111;
-    border-bottom: 1px solid #333;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: #111;
+  border-bottom: 1px solid #333;
 }
 .vista-error-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 12px;
-    background: rgba(255, 76, 76, 0.15);
-    color: #ff4c4c;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(255, 76, 76, 0.15);
+  color: #ff4c4c;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 .vista-error-badge::before {
-    content: '';
-    width: 8px;
-    height: 8px;
-    background: #ff4c4c;
-    border-radius: 50%;
-    animation: pulse 2s infinite;
+  content: '';
+  width: 8px;
+  height: 8px;
+  background: #ff4c4c;
+  border-radius: 50%;
+  animation: vista-pulse 2s infinite;
 }
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
+@keyframes vista-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 .vista-error-content {
-    padding: 24px;
+  padding: 24px;
 }
 .vista-error-message {
-    font-size: 20px;
-    font-weight: 600;
-    line-height: 1.5;
-    margin-bottom: 20px;
-    color: #fff;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.6;
+  margin-bottom: 20px;
+  color: #fff;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .vista-error-location {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 12px 16px;
-    background: #111;
-    border: 1px solid #333;
-    border-radius: 8px;
-    margin-bottom: 20px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #111;
+  border: 1px solid #333;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+.vista-error-location:hover {
+  border-color: #0070f3;
 }
 .vista-error-location-file {
-    color: #0070f3;
+  color: #0070f3;
 }
 .vista-error-location-line {
-    color: #888;
+  color: #888;
+}
+.vista-error-code-frame {
+  background: #0d0d0d;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 16px;
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre;
+  color: #ccc;
+  margin-bottom: 20px;
 }
 .vista-error-stack {
-    background: #0d0d0d;
-    border: 1px solid #333;
-    border-radius: 8px;
-    padding: 16px;
-    overflow-x: auto;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 12px;
-    line-height: 1.6;
-    white-space: pre-wrap;
-    word-break: break-word;
-    color: #999;
-    max-height: 400px;
-    overflow-y: auto;
-}
-.vista-error-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px 20px;
-    background: #111;
-    border-top: 1px solid #333;
-}
-.vista-error-footer-text {
-    font-size: 12px;
-    color: #666;
-}
-.vista-error-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 10px 16px;
-    background: #0070f3;
-    border: none;
-    border-radius: 8px;
-    color: #fff;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s ease;
-}
-.vista-error-btn:hover {
-    filter: brightness(1.1);
-}
-.vista-error-nav {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-}
-.vista-error-nav-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    background: transparent;
-    border: 1px solid #333;
-    border-radius: 8px;
-    color: #888;
-    cursor: pointer;
-    transition: all 0.15s ease;
-}
-.vista-error-nav-btn:hover:not(:disabled) {
-    background: #1a1a1a;
-    color: #fff;
-}
-.vista-error-nav-btn:disabled {
-    opacity: 0.3;
-    cursor: not-allowed;
-}
-.vista-error-count {
-    font-size: 13px;
-    color: #666;
-    min-width: 60px;
-    text-align: center;
+  background: #0d0d0d;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 16px;
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #999;
+  max-height: 300px;
+  overflow-y: auto;
 }
 .vista-error-stack-title {
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    color: #666;
-    margin-bottom: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #666;
+  margin-bottom: 12px;
 }
-</style>
+.vista-error-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: #111;
+  border-top: 1px solid #333;
+}
+.vista-error-footer-text {
+  font-size: 12px;
+  color: #666;
+}
+.vista-error-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  background: #0070f3;
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.vista-error-btn:hover {
+  filter: brightness(1.1);
+}
+.vista-error-nav {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.vista-error-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: 1px solid #333;
+  border-radius: 8px;
+  color: #888;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.vista-error-nav-btn:hover:not(:disabled) {
+  background: #1a1a1a;
+  color: #fff;
+}
+.vista-error-nav-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.vista-error-count {
+  font-size: 13px;
+  color: #666;
+  min-width: 60px;
+  text-align: center;
+}
 `;
 
 // ============================================================================
 // Inline JS for interactivity (no React required)
 // ============================================================================
 
-const INLINE_SCRIPT = `
-<script>
-    function reloadPage() {
-        window.location.reload();
-    }
-    function openInEditor(file, line, column) {
-        const url = 'vscode://file' + file + ':' + (line || 1) + ':' + (column || 1);
-        window.open(url, '_blank');
-    }
-</script>
+const OVERLAY_SCRIPT = `
+function vistaReload() {
+  window.location.reload();
+}
+function vistaOpenInEditor(file, line, column) {
+  // Normalize Windows backslashes to forward slashes for URL
+  var normalized = file.replace(/\\\\/g, '/');
+  window.location.href = 'vscode://file/' + normalized + ':' + (line || 1) + ':' + (column || 1);
+}
 `;
 
 // ============================================================================
-// Stack Trace Parser
+// Helpers
 // ============================================================================
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+/** Escape a string for safe embedding inside a JS string literal (single-quoted). */
+function escapeJsString(text: string): string {
+  return text
+    .replace(/\\/g, '\\\\') // backslashes first
+    .replace(/'/g, "\\'")
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r');
+}
+
 function parseStackTrace(stack: string): string[] {
-    if (!stack) return [];
-    return stack.split('\n').filter(line => line.trim());
+  if (!stack) return [];
+  return stack.split('\n').filter((line) => line.trim());
 }
 
 // ============================================================================
-// Error Overlay Component (SSR only - no hydration)
+// Full-page HTML renderer (used directly by engines)
+// ============================================================================
+
+/**
+ * Render a full HTML error page.
+ * Engines should send this directly: `res.status(500).send(renderErrorHTML(...))`.
+ */
+export function renderErrorHTML(errors: VistaError[]): string {
+  const error = errors[0];
+  if (!error) return '<!DOCTYPE html><html><body></body></html>';
+
+  const stackLines = parseStackTrace(error.stack || '');
+  const errorTypeLabel =
+    error.type === 'build'
+      ? 'Build Error'
+      : error.type === 'hydration'
+        ? 'Hydration Error'
+        : 'Runtime Error';
+
+  const locationHtml = error.file
+    ? `
+    <div class="vista-error-location" onclick="vistaOpenInEditor('${escapeJsString(error.file)}', ${error.line || 1}, ${error.column || 1})">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: #888; flex-shrink: 0">
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"></path>
+        <polyline points="14,2 14,8 20,8"></polyline>
+      </svg>
+      <span class="vista-error-location-file">${escapeHtml(error.file)}</span>
+      ${error.line ? `<span class="vista-error-location-line">:${error.line}${error.column ? ':' + error.column : ''}</span>` : ''}
+    </div>`
+    : '';
+
+  const codeFrameHtml = error.codeFrame
+    ? `<div class="vista-error-code-frame">${escapeHtml(error.codeFrame)}</div>`
+    : '';
+
+  const stackHtml =
+    stackLines.length > 0
+      ? `
+    <div class="vista-error-stack-title">Stack Trace</div>
+    <div class="vista-error-stack">${escapeHtml(stackLines.join('\n'))}</div>`
+      : '';
+
+  const navHtml =
+    errors.length > 1
+      ? `<div class="vista-error-nav"><span class="vista-error-count">1 of ${errors.length}</span></div>`
+      : '';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Error - Vista</title>
+  <style>${OVERLAY_STYLES}</style>
+  <script>${OVERLAY_SCRIPT}</script>
+  <script>
+    // Vista live-reload: auto-refresh error overlay when files change
+    (function() {
+      function connect() {
+        var es = new EventSource('/__vista_reload');
+        es.onmessage = function() { window.location.reload(); };
+        es.onerror = function() {
+          es.close();
+          setTimeout(connect, 1500);
+        };
+      }
+      connect();
+    })();
+  </script>
+</head>
+<body>
+  <div class="vista-error-container">
+    <div class="vista-error-dialog" role="dialog" aria-label="Error">
+      <div class="vista-error-header">
+        <span class="vista-error-badge">${errorTypeLabel}</span>
+        ${navHtml}
+      </div>
+      <div class="vista-error-content">
+        <div class="vista-error-message">${escapeHtml(error.message)}</div>
+        ${locationHtml}
+        ${codeFrameHtml}
+        ${stackHtml}
+      </div>
+      <div class="vista-error-footer">
+        <span class="vista-error-footer-text">Vista JS Development Mode</span>
+        <button class="vista-error-btn" onclick="vistaReload()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="23,4 23,10 17,10"></polyline>
+            <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"></path>
+          </svg>
+          Reload
+        </button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+// ============================================================================
+// React Component (kept for DevErrorBoundary + backwards compat)
 // ============================================================================
 
 export function ErrorOverlay({ errors }: ErrorOverlayProps): React.ReactElement {
-    const error = errors[0];
-    if (!error) return <div />;
+  const error = errors[0];
+  if (!error) return <div />;
 
-    const stackLines = parseStackTrace(error.stack || '');
-    const errorTypeLabel = error.type === 'build' ? 'Build Error' :
-        error.type === 'hydration' ? 'Hydration Error' : 'Runtime Error';
+  const stackLines = parseStackTrace(error.stack || '');
+  const errorTypeLabel =
+    error.type === 'build'
+      ? 'Build Error'
+      : error.type === 'hydration'
+        ? 'Hydration Error'
+        : 'Runtime Error';
 
-    const fileName = error.file?.split(/[/\\]/).pop() || '';
-
-    return (
-        <div dangerouslySetInnerHTML={{
-            __html: `
-${INLINE_STYLES}
-${INLINE_SCRIPT}
+  return (
+    <div
+      dangerouslySetInnerHTML={{
+        __html: `
+<style>${OVERLAY_STYLES}</style>
+<script>${OVERLAY_SCRIPT}</script>
 <div class="vista-error-container">
-    <div class="vista-error-dialog" role="dialog">
-        <div class="vista-error-header">
-            <span class="vista-error-badge">${errorTypeLabel}</span>
-            ${errors.length > 1 ? `
-            <div class="vista-error-nav">
-                <span class="vista-error-count">1 of ${errors.length}</span>
-            </div>
-            ` : ''}
-        </div>
-        
-        <div class="vista-error-content">
-            <div class="vista-error-message">${escapeHtml(error.message)}</div>
-            
-            ${error.file ? `
-            <div class="vista-error-location" onclick="openInEditor('${escapeAttr(error.file)}', ${error.line || 1}, ${error.column || 1})" style="cursor: pointer">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: #888">
-                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"></path>
-                    <polyline points="14,2 14,8 20,8"></polyline>
-                </svg>
-                <span class="vista-error-location-file">${escapeHtml(error.file)}</span>
-                ${error.line ? `<span class="vista-error-location-line">:${error.line}${error.column ? `:${error.column}` : ''}</span>` : ''}
-            </div>
-            ` : ''}
-            
-            ${stackLines.length > 0 ? `
-            <div class="vista-error-stack-title">Stack Trace</div>
-            <div class="vista-error-stack">${escapeHtml(stackLines.join('\n'))}</div>
-            ` : ''}
-        </div>
-        
-        <div class="vista-error-footer">
-            <span class="vista-error-footer-text">Vista Development Mode</span>
-            <button class="vista-error-btn" onclick="reloadPage()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="23,4 23,10 17,10"></polyline>
-                    <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"></path>
-                </svg>
-                Reload Page
-            </button>
-        </div>
+  <div class="vista-error-dialog" role="dialog" aria-label="Error">
+    <div class="vista-error-header">
+      <span class="vista-error-badge">${errorTypeLabel}</span>
+      ${errors.length > 1 ? `<div class="vista-error-nav"><span class="vista-error-count">1 of ${errors.length}</span></div>` : ''}
     </div>
-</div>
-            `
-        }} />
-    );
-}
-
-// Helper functions
-function escapeHtml(text: string): string {
-    return text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
-}
-
-function escapeAttr(text: string): string {
-    return text.replace(/'/g, "\\'").replace(/"/g, '\\"');
+    <div class="vista-error-content">
+      <div class="vista-error-message">${escapeHtml(error.message)}</div>
+      ${
+        error.file
+          ? `
+      <div class="vista-error-location" onclick="vistaOpenInEditor('${escapeJsString(error.file)}', ${error.line || 1}, ${error.column || 1})">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: #888; flex-shrink: 0">
+          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"></path>
+          <polyline points="14,2 14,8 20,8"></polyline>
+        </svg>
+        <span class="vista-error-location-file">${escapeHtml(error.file)}</span>
+        ${error.line ? `<span class="vista-error-location-line">:${error.line}${error.column ? ':' + error.column : ''}</span>` : ''}
+      </div>`
+          : ''
+      }
+      ${error.codeFrame ? `<div class="vista-error-code-frame">${escapeHtml(error.codeFrame)}</div>` : ''}
+      ${
+        stackLines.length > 0
+          ? `
+      <div class="vista-error-stack-title">Stack Trace</div>
+      <div class="vista-error-stack">${escapeHtml(stackLines.join('\n'))}</div>`
+          : ''
+      }
+    </div>
+    <div class="vista-error-footer">
+      <span class="vista-error-footer-text">Vista JS Development Mode</span>
+      <button class="vista-error-btn" onclick="vistaReload()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="23,4 23,10 17,10"></polyline>
+          <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"></path>
+        </svg>
+        Reload
+      </button>
+    </div>
+  </div>
+</div>`,
+      }}
+    />
+  );
 }
 
 // ============================================================================
-// Legacy exports for compatibility
+// Error Boundary (client-side)
 // ============================================================================
 
 export class DevErrorBoundary extends React.Component<
-    { children: React.ReactNode },
-    { hasError: boolean; error: Error | null }
+  { children: React.ReactNode },
+  { hasError: boolean; error: Error | null }
 > {
-    constructor(props: any) {
-        super(props);
-        this.state = { hasError: false, error: null };
-    }
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
 
-    static getDerivedStateFromError(error: Error) {
-        return { hasError: true, error };
-    }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
 
-    render() {
-        if (this.state.hasError && this.state.error) {
-            return (
-                <ErrorOverlay
-                    errors={[{
-                        type: 'runtime',
-                        message: this.state.error.message || 'Unknown Error',
-                        stack: this.state.error.stack
-                    }]}
-                />
-            );
-        }
-        return this.props.children;
+  render() {
+    if (this.state.hasError && this.state.error) {
+      return (
+        <ErrorOverlay
+          errors={[
+            {
+              type: 'runtime',
+              message: this.state.error.message || 'Unknown Error',
+              stack: this.state.error.stack,
+            },
+          ]}
+        />
+      );
     }
+    return this.props.children;
+  }
 }
 
 // Re-exports for backwards compatibility
 export { ErrorOverlay as VistaErrorOverlay };
 export { DevErrorBoundary as VistaDevErrorBoundary };
-

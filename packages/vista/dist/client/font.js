@@ -1,109 +1,88 @@
 "use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.localFont = exports.Space_Grotesk = exports.Outfit = exports.Merriweather = exports.Playfair_Display = exports.JetBrains_Mono = exports.Source_Code_Pro = exports.Roboto_Mono = exports.Poppins = exports.Montserrat = exports.Lato = exports.Open_Sans = exports.Roboto = exports.Inter = void 0;
-exports.createGoogleFont = createGoogleFont;
-exports.createLocalFont = createLocalFont;
-exports.FontProvider = FontProvider;
-const jsx_runtime_1 = require("react/jsx-runtime");
-// Generate unique class name
-function generateClassName(name) {
-    const hash = name.split('').reduce((acc, char) => {
-        return ((acc << 5) - acc + char.charCodeAt(0)) | 0;
-    }, 0);
-    return `__font_${Math.abs(hash).toString(36)}`;
-}
-// Google Fonts base URL
-const GOOGLE_FONTS_URL = 'https://fonts.googleapis.com/css2';
 /**
- * Create a Google Font loader
+ * Vista Font — Legacy re-export
+ *
+ * This file re-exports everything from the new `font/` module system.
+ * Users should prefer the explicit imports:
+ *
+ *   import { Inter } from '@vistagenic/vista/font/google';
+ *   import localFont from '@vistagenic/vista/font/local';
+ *
+ * But `import { Inter } from '@vistagenic/vista/font'` still works.
  */
-function createGoogleFont(fontFamily, options = {}) {
-    const { weight = 400, style = 'normal', subsets = ['latin'], display = 'swap', fallback = ['system-ui', 'sans-serif'], variable, } = options;
-    const className = generateClassName(fontFamily);
-    const weights = Array.isArray(weight) ? weight : [weight];
-    const styles = Array.isArray(style) ? style : [style];
-    // Build font family string with fallbacks
-    const fontFamilyValue = `'${fontFamily}', ${fallback.join(', ')}`;
-    // Generate CSS for injection
-    const cssVariableName = variable || `--font-${fontFamily.toLowerCase().replace(/\s+/g, '-')}`;
-    // In a real implementation, this would inject a <link> tag or fetch the CSS
-    // For now, we return the configuration for the build system to handle
-    return {
-        className,
-        style: { fontFamily: fontFamilyValue },
-        variable: cssVariableName,
-    };
-}
-/**
- * Create a local font loader
- */
-function createLocalFont(options) {
-    const { src, weight = 400, style = 'normal', display = 'swap', fallback = ['system-ui', 'sans-serif'], variable, declarations = [], } = options;
-    const sources = Array.isArray(src) ? src : [{ path: src, weight, style }];
-    const fontName = `LocalFont_${Date.now().toString(36)}`;
-    const className = generateClassName(fontName);
-    const fontFamilyValue = `'${fontName}', ${fallback.join(', ')}`;
-    const cssVariableName = variable || `--font-local-${className}`;
-    return {
-        className,
-        style: { fontFamily: fontFamilyValue },
-        variable: cssVariableName,
-    };
-}
-// Pre-configured Google Fonts (like Next.js)
-const Inter = (options) => createGoogleFont('Inter', { ...options, fallback: ['system-ui', 'sans-serif'] });
-exports.Inter = Inter;
-const Roboto = (options) => createGoogleFont('Roboto', { ...options, fallback: ['system-ui', 'sans-serif'] });
-exports.Roboto = Roboto;
-const Open_Sans = (options) => createGoogleFont('Open Sans', { ...options, fallback: ['system-ui', 'sans-serif'] });
-exports.Open_Sans = Open_Sans;
-const Lato = (options) => createGoogleFont('Lato', { ...options, fallback: ['system-ui', 'sans-serif'] });
-exports.Lato = Lato;
-const Montserrat = (options) => createGoogleFont('Montserrat', { ...options, fallback: ['system-ui', 'sans-serif'] });
-exports.Montserrat = Montserrat;
-const Poppins = (options) => createGoogleFont('Poppins', { ...options, fallback: ['system-ui', 'sans-serif'] });
-exports.Poppins = Poppins;
-const Roboto_Mono = (options) => createGoogleFont('Roboto Mono', { ...options, fallback: ['monospace'] });
-exports.Roboto_Mono = Roboto_Mono;
-const Source_Code_Pro = (options) => createGoogleFont('Source Code Pro', { ...options, fallback: ['monospace'] });
-exports.Source_Code_Pro = Source_Code_Pro;
-const JetBrains_Mono = (options) => createGoogleFont('JetBrains Mono', { ...options, fallback: ['monospace'] });
-exports.JetBrains_Mono = JetBrains_Mono;
-const Playfair_Display = (options) => createGoogleFont('Playfair Display', { ...options, fallback: ['serif'] });
-exports.Playfair_Display = Playfair_Display;
-const Merriweather = (options) => createGoogleFont('Merriweather', { ...options, fallback: ['serif'] });
-exports.Merriweather = Merriweather;
-const Outfit = (options) => createGoogleFont('Outfit', { ...options, fallback: ['system-ui', 'sans-serif'] });
-exports.Outfit = Outfit;
-const Space_Grotesk = (options) => createGoogleFont('Space Grotesk', { ...options, fallback: ['system-ui', 'sans-serif'] });
-exports.Space_Grotesk = Space_Grotesk;
-function FontProvider({ fonts, children }) {
-    // Generate CSS for fonts
-    const fontCSS = fonts.map(font => {
-        if (font.variable) {
-            return `:root { ${font.variable}: ${font.style.fontFamily}; }`;
-        }
-        return '';
-    }).filter(Boolean).join('\n');
-    return ((0, jsx_runtime_1.jsxs)(jsx_runtime_1.Fragment, { children: [fontCSS && ((0, jsx_runtime_1.jsx)("style", { dangerouslySetInnerHTML: { __html: fontCSS } })), children] }));
-}
-// Local font helper
-exports.localFont = createLocalFont;
-// Default export
-exports.default = {
-    Inter: exports.Inter,
-    Roboto: exports.Roboto,
-    Open_Sans: exports.Open_Sans,
-    Lato: exports.Lato,
-    Montserrat: exports.Montserrat,
-    Poppins: exports.Poppins,
-    Roboto_Mono: exports.Roboto_Mono,
-    Source_Code_Pro: exports.Source_Code_Pro,
-    JetBrains_Mono: exports.JetBrains_Mono,
-    Playfair_Display: exports.Playfair_Display,
-    Merriweather: exports.Merriweather,
-    Outfit: exports.Outfit,
-    Space_Grotesk: exports.Space_Grotesk,
-    localFont: exports.localFont,
-    FontProvider,
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
 };
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.Bebas_Neue = exports.Space_Mono = exports.Geist_Mono = exports.Inconsolata = exports.IBM_Plex_Mono = exports.Fira_Code = exports.JetBrains_Mono = exports.Source_Code_Pro = exports.Roboto_Mono = exports.Cormorant_Garamond = exports.Crimson_Text = exports.Bitter = exports.DM_Serif_Display = exports.Libre_Baskerville = exports.Noto_Serif = exports.PT_Serif = exports.Lora = exports.Merriweather = exports.Playfair_Display = exports.PT_Sans = exports.Mulish = exports.Rubik = exports.Noto_Sans = exports.Karla = exports.Cabin = exports.Lexend = exports.Sora = exports.Plus_Jakarta_Sans = exports.Geist = exports.Figtree = exports.Barlow = exports.Quicksand = exports.Work_Sans = exports.DM_Sans = exports.Space_Grotesk = exports.Manrope = exports.Outfit = exports.Oswald = exports.Ubuntu = exports.Raleway = exports.Nunito_Sans = exports.Nunito = exports.Poppins = exports.Montserrat = exports.Lato = exports.Open_Sans = exports.Roboto = exports.Inter = exports.googleFont = exports.createGoogleFont = void 0;
+exports.getFontHeadHTML = exports.clearRegistry = exports.getRegisteredFonts = exports.registerFont = exports.localFont = exports.createLocalFont = exports.Titan_One = exports.Righteous = exports.Comfortaa = exports.Lobster = exports.Dancing_Script = exports.Permanent_Marker = exports.Pacifico = exports.Abril_Fatface = void 0;
+// Re-export Google Fonts
+var google_1 = require("../font/google");
+Object.defineProperty(exports, "createGoogleFont", { enumerable: true, get: function () { return google_1.createGoogleFont; } });
+Object.defineProperty(exports, "googleFont", { enumerable: true, get: function () { return google_1.googleFont; } });
+Object.defineProperty(exports, "Inter", { enumerable: true, get: function () { return google_1.Inter; } });
+Object.defineProperty(exports, "Roboto", { enumerable: true, get: function () { return google_1.Roboto; } });
+Object.defineProperty(exports, "Open_Sans", { enumerable: true, get: function () { return google_1.Open_Sans; } });
+Object.defineProperty(exports, "Lato", { enumerable: true, get: function () { return google_1.Lato; } });
+Object.defineProperty(exports, "Montserrat", { enumerable: true, get: function () { return google_1.Montserrat; } });
+Object.defineProperty(exports, "Poppins", { enumerable: true, get: function () { return google_1.Poppins; } });
+Object.defineProperty(exports, "Nunito", { enumerable: true, get: function () { return google_1.Nunito; } });
+Object.defineProperty(exports, "Nunito_Sans", { enumerable: true, get: function () { return google_1.Nunito_Sans; } });
+Object.defineProperty(exports, "Raleway", { enumerable: true, get: function () { return google_1.Raleway; } });
+Object.defineProperty(exports, "Ubuntu", { enumerable: true, get: function () { return google_1.Ubuntu; } });
+Object.defineProperty(exports, "Oswald", { enumerable: true, get: function () { return google_1.Oswald; } });
+Object.defineProperty(exports, "Outfit", { enumerable: true, get: function () { return google_1.Outfit; } });
+Object.defineProperty(exports, "Manrope", { enumerable: true, get: function () { return google_1.Manrope; } });
+Object.defineProperty(exports, "Space_Grotesk", { enumerable: true, get: function () { return google_1.Space_Grotesk; } });
+Object.defineProperty(exports, "DM_Sans", { enumerable: true, get: function () { return google_1.DM_Sans; } });
+Object.defineProperty(exports, "Work_Sans", { enumerable: true, get: function () { return google_1.Work_Sans; } });
+Object.defineProperty(exports, "Quicksand", { enumerable: true, get: function () { return google_1.Quicksand; } });
+Object.defineProperty(exports, "Barlow", { enumerable: true, get: function () { return google_1.Barlow; } });
+Object.defineProperty(exports, "Figtree", { enumerable: true, get: function () { return google_1.Figtree; } });
+Object.defineProperty(exports, "Geist", { enumerable: true, get: function () { return google_1.Geist; } });
+Object.defineProperty(exports, "Plus_Jakarta_Sans", { enumerable: true, get: function () { return google_1.Plus_Jakarta_Sans; } });
+Object.defineProperty(exports, "Sora", { enumerable: true, get: function () { return google_1.Sora; } });
+Object.defineProperty(exports, "Lexend", { enumerable: true, get: function () { return google_1.Lexend; } });
+Object.defineProperty(exports, "Cabin", { enumerable: true, get: function () { return google_1.Cabin; } });
+Object.defineProperty(exports, "Karla", { enumerable: true, get: function () { return google_1.Karla; } });
+Object.defineProperty(exports, "Noto_Sans", { enumerable: true, get: function () { return google_1.Noto_Sans; } });
+Object.defineProperty(exports, "Rubik", { enumerable: true, get: function () { return google_1.Rubik; } });
+Object.defineProperty(exports, "Mulish", { enumerable: true, get: function () { return google_1.Mulish; } });
+Object.defineProperty(exports, "PT_Sans", { enumerable: true, get: function () { return google_1.PT_Sans; } });
+Object.defineProperty(exports, "Playfair_Display", { enumerable: true, get: function () { return google_1.Playfair_Display; } });
+Object.defineProperty(exports, "Merriweather", { enumerable: true, get: function () { return google_1.Merriweather; } });
+Object.defineProperty(exports, "Lora", { enumerable: true, get: function () { return google_1.Lora; } });
+Object.defineProperty(exports, "PT_Serif", { enumerable: true, get: function () { return google_1.PT_Serif; } });
+Object.defineProperty(exports, "Noto_Serif", { enumerable: true, get: function () { return google_1.Noto_Serif; } });
+Object.defineProperty(exports, "Libre_Baskerville", { enumerable: true, get: function () { return google_1.Libre_Baskerville; } });
+Object.defineProperty(exports, "DM_Serif_Display", { enumerable: true, get: function () { return google_1.DM_Serif_Display; } });
+Object.defineProperty(exports, "Bitter", { enumerable: true, get: function () { return google_1.Bitter; } });
+Object.defineProperty(exports, "Crimson_Text", { enumerable: true, get: function () { return google_1.Crimson_Text; } });
+Object.defineProperty(exports, "Cormorant_Garamond", { enumerable: true, get: function () { return google_1.Cormorant_Garamond; } });
+Object.defineProperty(exports, "Roboto_Mono", { enumerable: true, get: function () { return google_1.Roboto_Mono; } });
+Object.defineProperty(exports, "Source_Code_Pro", { enumerable: true, get: function () { return google_1.Source_Code_Pro; } });
+Object.defineProperty(exports, "JetBrains_Mono", { enumerable: true, get: function () { return google_1.JetBrains_Mono; } });
+Object.defineProperty(exports, "Fira_Code", { enumerable: true, get: function () { return google_1.Fira_Code; } });
+Object.defineProperty(exports, "IBM_Plex_Mono", { enumerable: true, get: function () { return google_1.IBM_Plex_Mono; } });
+Object.defineProperty(exports, "Inconsolata", { enumerable: true, get: function () { return google_1.Inconsolata; } });
+Object.defineProperty(exports, "Geist_Mono", { enumerable: true, get: function () { return google_1.Geist_Mono; } });
+Object.defineProperty(exports, "Space_Mono", { enumerable: true, get: function () { return google_1.Space_Mono; } });
+Object.defineProperty(exports, "Bebas_Neue", { enumerable: true, get: function () { return google_1.Bebas_Neue; } });
+Object.defineProperty(exports, "Abril_Fatface", { enumerable: true, get: function () { return google_1.Abril_Fatface; } });
+Object.defineProperty(exports, "Pacifico", { enumerable: true, get: function () { return google_1.Pacifico; } });
+Object.defineProperty(exports, "Permanent_Marker", { enumerable: true, get: function () { return google_1.Permanent_Marker; } });
+Object.defineProperty(exports, "Dancing_Script", { enumerable: true, get: function () { return google_1.Dancing_Script; } });
+Object.defineProperty(exports, "Lobster", { enumerable: true, get: function () { return google_1.Lobster; } });
+Object.defineProperty(exports, "Comfortaa", { enumerable: true, get: function () { return google_1.Comfortaa; } });
+Object.defineProperty(exports, "Righteous", { enumerable: true, get: function () { return google_1.Righteous; } });
+Object.defineProperty(exports, "Titan_One", { enumerable: true, get: function () { return google_1.Titan_One; } });
+// Re-export Local Font
+var local_1 = require("../font/local");
+Object.defineProperty(exports, "createLocalFont", { enumerable: true, get: function () { return local_1.createLocalFont; } });
+Object.defineProperty(exports, "localFont", { enumerable: true, get: function () { return __importDefault(local_1).default; } });
+// Re-export Registry helpers (used by SSR engines)
+var registry_1 = require("../font/registry");
+Object.defineProperty(exports, "registerFont", { enumerable: true, get: function () { return registry_1.registerFont; } });
+Object.defineProperty(exports, "getRegisteredFonts", { enumerable: true, get: function () { return registry_1.getRegisteredFonts; } });
+Object.defineProperty(exports, "clearRegistry", { enumerable: true, get: function () { return registry_1.clearRegistry; } });
+Object.defineProperty(exports, "getFontHeadHTML", { enumerable: true, get: function () { return registry_1.getFontHeadHTML; } });

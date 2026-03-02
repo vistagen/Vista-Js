@@ -1,7 +1,4 @@
-import * as React from 'react';
-import Image from 'vista/image';
-import { Client } from 'vista';
-import Counter from './counter';
+import Counter from './Counter';
 
 export default function Index() {
   return (
@@ -9,23 +6,15 @@ export default function Index() {
       <div className="-mt-20 mb-10 relative border border-dashed border-gray-300 dark:border-neutral-700 p-10">
         <div className="absolute -top-0 -left-0 -translate-x-1/2 -translate-y-1/2 w-24 h-24 border border-dashed border-gray-300 dark:border-neutral-700 rounded-full" />
         <div className="absolute -bottom-0 -right-0 translate-x-1/2 translate-y-1/2 w-24 h-24 border border-dashed border-gray-300 dark:border-neutral-700 rounded-full" />
-        <Image
-          src="/vista.svg"
-          alt="Vista Logo"
-          width={600}
-          height={600}
-          className="dark:invert"
-          priority
-        />
+        <img src="/vista.svg" alt="Vista Logo" width={600} height={600} className="dark:invert" />
       </div>
 
       <h1 className="max-w-xs sm:max-w-none text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50 text-center">
-        To get started, edit the index.tsx
+        To get started, edit the index.tsx file.
       </h1>
 
-      <Client>
-        <Counter />
-      </Client>
+      {/* Client component with useState + useEffect */}
+      <Counter />
     </main>
   );
 }

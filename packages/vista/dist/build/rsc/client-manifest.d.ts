@@ -2,7 +2,7 @@
  * Client Component Manifest Generator
  *
  * Scans the app directory and builds a manifest of all Client Components.
- * Client components are those with 'client load' directive.
+ * Client components are those with 'use client' directive.
  *
  * The manifest maps component paths to their chunk names for client-side loading.
  */
@@ -34,6 +34,10 @@ export interface ClientManifest {
  * Generate the client component manifest
  */
 export declare function generateClientManifest(cwd: string, appDir: string): ClientManifest;
+export declare function generateClientManifestWithRoots(cwd: string, appDir: string, additionalRoots?: Array<{
+    dir: string;
+    prefix?: string;
+}>): ClientManifest;
 /**
  * Get client component info by module ID
  */

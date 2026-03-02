@@ -6,14 +6,14 @@
  *
  * Server Component Rules:
  * - By default, all components are Server Components
- * - Using 'client load' directive makes it a Client Component
- * - Using client hooks (useState, useEffect, etc.) without 'client load' is an ERROR
+ * - Using 'use client' directive makes it a Client Component
+ * - Using client hooks (useState, useEffect, etc.) without 'use client' is an ERROR
  *
  * Performance: Uses Rust-powered RSC scanner when available (~10-100x faster)
  */
 export interface RouteNode {
     segment: string;
-    kind: 'static' | 'dynamic' | 'catch-all';
+    kind: 'static' | 'dynamic' | 'catch-all' | 'optional-catch-all' | 'group';
     indexPath?: string;
     layoutPath?: string;
     loadingPath?: string;

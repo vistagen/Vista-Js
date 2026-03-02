@@ -4,7 +4,7 @@
  * Dynamic component loading with SSR support.
  * Similar to Next.js dynamic.
  */
-'client load';
+'use client';
 "use strict";
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;

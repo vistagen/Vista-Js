@@ -3,7 +3,7 @@
  *
  * Creates separate webpack configurations for:
  * 1. Server Bundle (.vista/server/) - All app code for SSR
- * 2. Client Bundle (.vista/static/) - Only 'client load' components
+ * 2. Client Bundle (.vista/static/) - Only 'use client' components
  */
 import webpack from 'webpack';
 import { VistaDirs } from '../manifest';
@@ -12,6 +12,7 @@ export interface RSCCompilerOptions {
     isDev: boolean;
     vistaDirs: VistaDirs;
     buildId: string;
+    clientReferenceFiles?: string[];
 }
 /**
  * Create Server-Side Webpack Configuration
@@ -23,7 +24,7 @@ export declare function createServerWebpackConfig(options: RSCCompilerOptions): 
 /**
  * Create Client-Side Webpack Configuration (RSC-aware)
  *
- * ONLY bundles components marked with 'client load'.
+ * ONLY bundles components marked with 'use client'.
  * Server components are replaced with client references.
  */
 export declare function createClientWebpackConfig(options: RSCCompilerOptions): webpack.Configuration;

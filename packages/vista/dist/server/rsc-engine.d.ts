@@ -1,20 +1,16 @@
 /**
- * Vista RSC Engine
+ * Vista RSC Web Engine
  *
- * React Server Components aware rendering engine.
+ * Serves SSR HTML and proxies Flight requests to a dedicated upstream process
+ * that runs with `--conditions react-server`.
  *
- * This engine implements the "True RSC Architecture":
- * 1. Server components render on the server only, contribute 0kb to client
- * 2. Client components are sent as references, hydrated on demand
- * 3. Strict separation ensures server secrets never leak
+ * SSR renders Flight streams into HTML using renderToPipeableStream,
+ * with a shim __webpack_require__ to resolve client modules during SSR.
  */
 import webpack from 'webpack';
 export interface RSCEngineOptions {
     port?: number;
-    compiler?: webpack.Compiler;
+    compiler?: webpack.Compiler | null;
 }
-/**
- * Start the RSC-aware Vista server
- */
 export declare function startRSCServer(options?: RSCEngineOptions): void;
 export { startRSCServer as default };

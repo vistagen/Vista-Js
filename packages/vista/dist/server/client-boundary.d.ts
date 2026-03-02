@@ -6,7 +6,7 @@
  */
 import * as React from 'react';
 /**
- * Check if a file is a client component by checking for 'client load' directive
+ * Check if a file is a client component by checking for 'use client' directive
  */
 declare function isClientComponent(filePath: string): boolean;
 /**

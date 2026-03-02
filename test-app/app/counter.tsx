@@ -1,52 +1,33 @@
-'client load';
+'use client';
 
-import * as React from 'react';
+import { useState, useEffect } from 'react';
 
 export default function Counter() {
-  const [count, setCount] = React.useState(0);
+  const [count, setCount] = useState(0);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
-    <div
-      style={{
-        padding: '20px',
-        backgroundColor: '#1a1a2e',
-        borderRadius: '12px',
-        textAlign: 'center',
-        margin: '20px 0',
-      }}
-    >
-      <h2 style={{ color: '#eee', marginBottom: '16px' }}>
-        Interactive Counter (Client Component)
-      </h2>
-      <p style={{ fontSize: '48px', fontWeight: 'bold', color: '#00d9ff', margin: '20px 0' }}>
-        {count}
+    <div className="mt-8 flex flex-col items-center gap-4">
+      <p className="text-sm text-gray-500 dark:text-gray-400">
+        {mounted ? '✅ Client component hydrated (useEffect ran)' : '⏳ Server rendered...'}
       </p>
-      <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+      <div className="flex items-center gap-4">
         <button
-          onClick={() => setCount((c) => c - 1)}
-          style={{
-            padding: '12px 24px',
-            fontSize: '18px',
-            backgroundColor: '#ff4757',
-            color: 'white',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-          }}
+          onClick={() => setCount(count - 1)}
+          className="px-4 py-2 rounded-lg bg-gray-200 dark:bg-neutral-800 text-black dark:text-white hover:bg-gray-300 dark:hover:bg-neutral-700 transition-colors"
         >
-          -
+          −
         </button>
+        <span className="text-2xl font-mono font-bold text-black dark:text-white w-16 text-center">
+          {count}
+        </span>
         <button
-          onClick={() => setCount((c) => c + 1)}
-          style={{
-            padding: '12px 24px',
-            fontSize: '18px',
-            backgroundColor: '#2ed573',
-            color: 'white',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-          }}
+          onClick={() => setCount(count + 1)}
+          className="px-4 py-2 rounded-lg bg-gray-200 dark:bg-neutral-800 text-black dark:text-white hover:bg-gray-300 dark:hover:bg-neutral-700 transition-colors"
         >
           +
         </button>

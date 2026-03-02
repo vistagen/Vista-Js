@@ -7,6 +7,7 @@ exports.createWebpackConfig = createWebpackConfig;
 const path_1 = __importDefault(require("path"));
 const webpack_1 = __importDefault(require("webpack"));
 const react_refresh_webpack_plugin_1 = __importDefault(require("@pmmmwh/react-refresh-webpack-plugin"));
+const mini_css_extract_plugin_1 = __importDefault(require("mini-css-extract-plugin"));
 const server_component_plugin_1 = require("./server-component-plugin");
 const vista_flight_plugin_1 = require("../build/webpack/plugins/vista-flight-plugin");
 function createWebpackConfig(options) {
@@ -30,14 +31,18 @@ function createWebpackConfig(options) {
     };
     const reactPath = findModulePath('react');
     const reactDomPath = findModulePath('react-dom');
+    // Resolve webpack-hot-middleware/client from Vista's own node_modules
+    // so it works even with file: or link: dependencies
+    const hmrClientPath = require.resolve('webpack-hot-middleware/client');
     return {
         mode: isDev ? 'development' : 'production',
         entry: isDev
             ? [
                 // HMR runtime - reload=true for full page reload on unaccepted modules
                 // noInfo to reduce console noise, overlay=false to use Vista's error overlay
-                'webpack-hot-middleware/client?path=/__webpack_hmr&timeout=20000&reload=true&noInfo=true&overlay=false',
-                entryPoint
+                hmrClientPath +
+                    '?path=/__webpack_hmr&timeout=20000&reload=true&noInfo=true&overlay=false',
+                entryPoint,
             ]
             : entryPoint,
         output: {
@@ -47,30 +52,35 @@ function createWebpackConfig(options) {
             clean: false, // Don't clean .vista folder
         },
         // Webpack 5 Persistent Caching - dramatically faster rebuilds
-        cache: isDev ? {
-            type: 'filesystem',
-            cacheDirectory: path_1.default.join(cwd, 'node_modules', '.cache', 'vista-webpack'),
-            buildDependencies: {
-                config: [__filename],
-            },
-        } : false,
+        cache: isDev
+            ? {
+                type: 'filesystem',
+                cacheDirectory: path_1.default.join(cwd, 'node_modules', '.cache', 'vista-webpack'),
+                buildDependencies: {
+                    config: [__filename],
+                },
+            }
+            : false,
         // Optimize module resolution for faster HMR
-        snapshot: isDev ? {
-            managedPaths: [path_1.default.resolve(cwd, 'node_modules')],
-            immutablePaths: [],
-        } : undefined,
+        snapshot: isDev
+            ? {
+                managedPaths: [path_1.default.resolve(cwd, 'node_modules')],
+                immutablePaths: [],
+            }
+            : undefined,
         resolve: {
             extensions: ['.tsx', '.ts', '.jsx', '.js'],
             alias: {
-                'react': reactPath,
+                react: reactPath,
                 'react-dom': reactDomPath,
                 'react/jsx-runtime': path_1.default.join(reactPath, 'jsx-runtime'),
                 'react/jsx-dev-runtime': path_1.default.join(reactPath, 'jsx-dev-runtime'),
             },
             modules: [
                 path_1.default.resolve(cwd, 'node_modules'),
-                'node_modules'
-            ]
+                path_1.default.resolve(__dirname, '..', '..', 'node_modules'),
+                'node_modules',
+            ],
         },
         module: {
             rules: [
@@ -92,41 +102,63 @@ function createWebpackConfig(options) {
                                             runtime: 'automatic',
                                             development: isDev,
                                             refresh: isDev, // Enable React Fast Refresh
-                                        }
+                                        },
                                     },
                                     target: 'es2020',
                                 },
                                 module: {
-                                    type: 'es6'
-                                }
-                            }
+                                    type: 'es6',
+                                },
+                            },
                         },
                         {
                             // Vista Flight Loader - marks modules with RSC info
                             // Runs FIRST (loaders execute bottom-to-top) to see original source
                             loader: require.resolve('../build/webpack/loaders/vista-flight-loader'),
                         },
-                    ]
+                    ],
+                },
+                {
+                    test: /\.module\.css$/,
+                    use: [
+                        mini_css_extract_plugin_1.default.loader,
+                        {
+                            loader: 'css-loader',
+                            options: {
+                                modules: {
+                                    mode: 'local',
+                                    localIdentName: isDev ? '[name]__[local]--[hash:base64:5]' : '[hash:base64:8]',
+                                },
+                            },
+                        },
+                    ],
                 },
                 {
                     test: /\.css$/,
-                    use: 'null-loader' // Ignore CSS in client bundle (handled by PostCSS)
-                }
-            ]
+                    exclude: /\.module\.css$/,
+                    use: 'null-loader', // Non-module CSS handled by PostCSS
+                },
+            ],
         },
         plugins: [
             // Server Component enforcement - runs on every compile
             new server_component_plugin_1.VistaServerComponentPlugin({ appDir: path_1.default.join(cwd, 'app') }),
             // Vista Flight Plugin - RSC bundle separation and manifest
             new vista_flight_plugin_1.VistaFlightPlugin({ appDir: path_1.default.join(cwd, 'app'), dev: isDev }),
-            ...(isDev ? [
-                new webpack_1.default.HotModuleReplacementPlugin(),
-                new react_refresh_webpack_plugin_1.default({
-                    overlay: false, // Disable built-in overlay, use Vista's error overlay
-                }),
-            ] : []),
+            ...(isDev
+                ? [
+                    new webpack_1.default.HotModuleReplacementPlugin(),
+                    new react_refresh_webpack_plugin_1.default({
+                        overlay: false, // Disable built-in overlay, use Vista's error overlay
+                    }),
+                ]
+                : []),
             new webpack_1.default.DefinePlugin({
                 'process.env.NODE_ENV': JSON.stringify(isDev ? 'development' : 'production'),
+            }),
+            new mini_css_extract_plugin_1.default({
+                filename: isDev ? 'modules.css' : 'modules-[contenthash:8].css',
+                chunkFilename: isDev ? '[name]-modules.css' : '[name]-modules-[contenthash:8].css',
             }),
         ],
         devtool: isDev ? 'eval-cheap-module-source-map' : 'source-map',

@@ -1,0 +1,63 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.validateVistaArtifacts = validateVistaArtifacts;
+exports.assertVistaArtifacts = assertVistaArtifacts;
+const fs_1 = __importDefault(require("fs"));
+const path_1 = __importDefault(require("path"));
+const BASE_REQUIRED_FILES = [
+    'BUILD_ID',
+    'artifact-manifest.json',
+    'build-manifest.json',
+    'routes-manifest.json',
+    'app-path-routes-manifest.json',
+    'prerender-manifest.json',
+    'required-server-files.json',
+    'react-client-manifest.json',
+    'react-server-manifest.json',
+];
+const RSC_REQUIRED_FILES = [
+    ...BASE_REQUIRED_FILES,
+    path_1.default.join('server', 'server-manifest.json'),
+];
+const LEGACY_REQUIRED_FILES = [
+    ...BASE_REQUIRED_FILES,
+    'client.js',
+];
+function readJsonSafe(absolutePath) {
+    try {
+        return JSON.parse(fs_1.default.readFileSync(absolutePath, 'utf-8'));
+    }
+    catch {
+        return null;
+    }
+}
+function validateVistaArtifacts(cwd, mode) {
+    const vistaDir = path_1.default.join(cwd, '.vista');
+    const missing = [];
+    const requiredFiles = mode === 'rsc' ? RSC_REQUIRED_FILES : LEGACY_REQUIRED_FILES;
+    if (!fs_1.default.existsSync(vistaDir)) {
+        return ['.vista directory is missing'];
+    }
+    for (const relativePath of requiredFiles) {
+        const absolutePath = path_1.default.join(vistaDir, relativePath);
+        if (!fs_1.default.existsSync(absolutePath)) {
+            missing.push(relativePath);
+        }
+    }
+    const artifactPath = path_1.default.join(vistaDir, 'artifact-manifest.json');
+    const artifactManifest = readJsonSafe(artifactPath);
+    if (fs_1.default.existsSync(artifactPath) && (!artifactManifest || artifactManifest.schemaVersion !== 1)) {
+        missing.push('artifact-manifest.json (invalid schemaVersion)');
+    }
+    return missing;
+}
+function assertVistaArtifacts(cwd, mode) {
+    const missing = validateVistaArtifacts(cwd, mode);
+    if (missing.length === 0)
+        return;
+    const missingList = missing.map((entry) => `- ${entry}`).join('\n');
+    throw new Error(`[vista:server] Missing or invalid .vista artifacts for ${mode} mode.\n${missingList}\nRun "vista build${mode === 'rsc' ? ' --rsc' : ''}" first.`);
+}

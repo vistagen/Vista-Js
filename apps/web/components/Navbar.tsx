@@ -1,4 +1,4 @@
-'client load';
+'use client';
 import { useState, useEffect } from 'react';
 import { Github } from 'lucide-react';
 import { siteConfig } from '../data/site';

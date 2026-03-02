@@ -2,25 +2,17 @@
 /**
  * Vista Flight Client Entry Plugin
  *
- * Webpack plugin that creates separate client entries for components
- * marked with 'client load' directive. Uses Rust scanner for detection.
- *
- * This is similar to Next.js's FlightClientEntryPlugin.
+ * Generates lightweight client manifest artifacts for legacy mode.
+ * This plugin intentionally stays isolated from Flight RSC mode.
  */
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.VistaFlightPlugin = void 0;
-exports.getClientModules = getClientModules;
-exports.isClientModule = isClientModule;
 const webpack_1 = __importDefault(require("webpack"));
 const path_1 = __importDefault(require("path"));
-// Plugin state for tracking client modules
-const pluginState = {
-    clientModules: new Map(),
-    serverModules: new Map(),
-};
+const component_identity_1 = require("../../rsc/component-identity");
 const PLUGIN_NAME = 'VistaFlightPlugin';
 class VistaFlightPlugin {
     appDir;
@@ -30,104 +22,80 @@ class VistaFlightPlugin {
         this.dev = options.dev;
     }
     apply(compiler) {
-        // Hook into afterCompile to collect module info
-        compiler.hooks.afterCompile.tap(PLUGIN_NAME, (compilation) => {
-            this.collectModuleInfo(compilation, compiler);
-        });
-        // Hook into emit to generate client reference manifest
-        compiler.hooks.emit.tapAsync(PLUGIN_NAME, (compilation, callback) => {
-            this.generateClientManifest(compilation);
-            callback();
+        compiler.hooks.compilation.tap(PLUGIN_NAME, (compilation) => {
+            compilation.hooks.processAssets.tap({
+                name: PLUGIN_NAME,
+                stage: webpack_1.default.Compilation.PROCESS_ASSETS_STAGE_ADDITIONAL,
+            }, () => {
+                const moduleInfo = this.collectModuleInfo(compilation);
+                this.emitClientManifest(compilation, moduleInfo.clientModules);
+            });
         });
     }
-    /**
-     * Collect information about all modules and their RSC status
-     */
-    collectModuleInfo(compilation, compiler) {
-        const modules = compilation.modules;
+    collectModuleInfo(compilation) {
+        const clientModules = new Map();
+        const serverModules = new Map();
         const normalizedAppDir = this.appDir.replace(/\\/g, '/').toLowerCase();
-        let checkedCount = 0;
-        let matchedCount = 0;
-        for (const mod of modules) {
-            // Check if it's a NormalModule (by checking for resource property)
+        for (const mod of compilation.modules) {
             const normalMod = mod;
             const resource = normalMod.resource;
             if (!resource)
                 continue;
-            checkedCount++;
-            // Normalize paths for comparison
-            const normalizedResource = resource.replace(/\\/g, '/').toLowerCase();
-            // Only process app directory files
-            if (!normalizedResource.includes(normalizedAppDir))
-                continue;
-            // Skip non-JS/TS files
             if (!/\.(tsx?|jsx?)$/i.test(resource))
                 continue;
-            matchedCount++;
-            // Get RSC info from build info (set by vista-flight-loader)
+            const normalizedResource = resource.replace(/\\/g, '/').toLowerCase();
+            if (!normalizedResource.includes(normalizedAppDir))
+                continue;
             const buildInfo = normalMod.buildInfo;
             const rscInfo = buildInfo?.rsc;
             if (!rscInfo)
                 continue;
             const moduleId = compilation.chunkGraph.getModuleId(normalMod);
-            const relativePath = path_1.default.relative(this.appDir, resource);
             const moduleInfo = {
-                moduleId: moduleId !== null ? moduleId : resource,
+                moduleId: moduleId ?? resource,
                 absolutePath: resource,
-                relativePath: relativePath.replace(/\\/g, '/'),
+                relativePath: path_1.default.relative(this.appDir, resource).replace(/\\/g, '/'),
                 exports: ['default'],
             };
             if (rscInfo.isClientRef) {
-                pluginState.clientModules.set(resource, moduleInfo);
+                clientModules.set(resource, moduleInfo);
             }
             else {
-                pluginState.serverModules.set(resource, moduleInfo);
+                serverModules.set(resource, moduleInfo);
             }
         }
-        // Debug logging (only in dev mode)
         if (this.dev && process.env.VISTA_DEBUG) {
-            console.log(`[Vista Flight Plugin] Found ${pluginState.clientModules.size} client, ${pluginState.serverModules.size} server modules`);
+            console.log(`[Vista Flight Plugin] Found ${clientModules.size} client, ${serverModules.size} server modules`);
         }
+        return { clientModules, serverModules };
     }
-    /**
-     * Generate client reference manifest for hydration
-     */
-    generateClientManifest(compilation) {
+    emitClientManifest(compilation, clientModules) {
         const manifest = {
             clientModules: {},
+            pathToId: {},
         };
-        // Build manifest from collected client modules
-        pluginState.clientModules.forEach((info, resource) => {
-            const componentId = path_1.default.basename(resource).replace(/\.(tsx?|jsx?)$/, '');
+        const stableEntries = Array.from(clientModules.entries()).sort((a, b) => a[1].relativePath.localeCompare(b[1].relativePath));
+        for (const [, info] of stableEntries) {
+            const componentId = (0, component_identity_1.createComponentId)('client', info.relativePath);
             manifest.clientModules[componentId] = {
                 id: info.moduleId,
                 chunks: ['client.js'],
                 name: 'default',
+                path: info.relativePath,
             };
-        });
-        // Emit manifest as a JS file that sets a global
-        const manifestSource = `
-// Vista Client Reference Manifest
-// Generated by VistaFlightPlugin
+            manifest.pathToId[info.relativePath] = componentId;
+        }
+        const jsSource = `// Vista Client Reference Manifest
 (function() {
-    if (typeof window !== 'undefined') {
-        window.__VISTA_CLIENT_MANIFEST__ = ${JSON.stringify(manifest, null, 2)};
-    }
-})();
-`.trim();
-        compilation.emitAsset('vista-client-manifest.js', new webpack_1.default.sources.RawSource(manifestSource));
-        // Also emit as JSON for debugging
+  if (typeof window !== 'undefined') {
+    window.__VISTA_CLIENT_MANIFEST__ = ${JSON.stringify(manifest, null, 2)};
+  }
+})();`;
+        compilation.emitAsset('vista-client-manifest.js', new webpack_1.default.sources.RawSource(jsSource));
         if (this.dev) {
             compilation.emitAsset('vista-client-manifest.json', new webpack_1.default.sources.RawSource(JSON.stringify(manifest, null, 2)));
         }
     }
 }
 exports.VistaFlightPlugin = VistaFlightPlugin;
-// Export plugin state for other modules to access
-function getClientModules() {
-    return pluginState.clientModules;
-}
-function isClientModule(resourcePath) {
-    return pluginState.clientModules.has(resourcePath);
-}
 exports.default = VistaFlightPlugin;

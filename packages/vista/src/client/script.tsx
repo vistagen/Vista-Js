@@ -5,7 +5,7 @@
  * Similar to Next.js Script component.
  */
 
-'client load';
+'use client';
 
 import * as React from 'react';
 

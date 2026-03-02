@@ -25,11 +25,11 @@ let mountIdCounter = 0;
 let isInitialized = false;
 let originalCompile = null;
 /**
- * Check if file content has 'client load' directive
+ * Check if file content has 'use client' directive
  */
 function hasClientDirective(content) {
     const trimmed = content.trim();
-    return trimmed.startsWith("'client load'") || trimmed.startsWith('"client load"');
+    return trimmed.startsWith("'use client'") || trimmed.startsWith('"use client"');
 }
 /**
  * Initialize the RSC module system

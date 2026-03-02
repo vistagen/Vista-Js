@@ -3,7 +3,7 @@
 //! This crate provides Rust-based transforms for Vista framework.
 //! 
 //! Features:
-//! - `'client load'` directive detection
+//! - `'use client'` directive detection
 //! - Component categorization (server vs client)
 //! - RSC (React Server Components) build system
 //! - Manifest generation

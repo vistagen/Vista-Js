@@ -2,6 +2,9 @@
   "name": "web",
   "version": "0.1.0",
   "scripts": {
+    "predev": "node scripts/ensure-vista-link.cjs",
+    "prebuild": "node scripts/ensure-vista-link.cjs",
+    "prestart": "node scripts/ensure-vista-link.cjs",
     "dev": "vista dev",
     "build": "vista build",
     "start": "vista start"

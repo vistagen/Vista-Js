@@ -3,7 +3,7 @@
  * Client Component Manifest Generator
  *
  * Scans the app directory and builds a manifest of all Client Components.
- * Client components are those with 'client load' directive.
+ * Client components are those with 'use client' directive.
  *
  * The manifest maps component paths to their chunk names for client-side loading.
  */
@@ -12,11 +12,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateClientManifest = generateClientManifest;
+exports.generateClientManifestWithRoots = generateClientManifestWithRoots;
 exports.getClientComponent = getClientComponent;
 exports.getClientComponentByPath = getClientComponentByPath;
 exports.isClientComponentPath = isClientComponentPath;
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
+const component_identity_1 = require("./component-identity");
 // Try to load Rust NAPI bindings
 let rustNative = null;
 try {
@@ -38,14 +40,17 @@ catch (e) {
     // Fallback to JS
 }
 /**
- * Check if source has 'client load' directive
+ * Check if source has 'use client' directive
  */
 function hasClientDirective(source) {
+    const trimmed = source.trimStart();
+    if (trimmed.startsWith("'use client'") || trimmed.startsWith('"use client"')) {
+        return true;
+    }
     if (rustNative?.isClientComponent) {
         return rustNative.isClientComponent(source);
     }
-    const trimmed = source.trim();
-    return trimmed.startsWith("'client load'") || trimmed.startsWith('"client load"');
+    return false;
 }
 /**
  * Extract export names from source (simple regex approach)
@@ -78,27 +83,9 @@ function extractExports(source) {
     return [...new Set(exports)];
 }
 /**
- * Generate a unique chunk name for a component
- */
-function generateChunkName(relativePath) {
-    return relativePath
-        .replace(/\\/g, '/')
-        .replace(/\.[jt]sx?$/, '')
-        .replace(/[^a-zA-Z0-9]/g, '_')
-        .toLowerCase();
-}
-/**
- * Generate unique module ID
- */
-function generateModuleId(relativePath) {
-    // Use a hash-like ID for production, readable path for dev
-    const normalized = relativePath.replace(/\\/g, '/').replace(/\.[jt]sx?$/, '');
-    return `client:${normalized}`;
-}
-/**
  * Scan directory recursively for client components
  */
-function scanForClientComponents(dir, appDir, components) {
+function scanForClientComponents(dir, scanRoot, components, pathPrefix = '') {
     if (!fs_1.default.existsSync(dir))
         return;
     const items = fs_1.default.readdirSync(dir, { withFileTypes: true });
@@ -106,7 +93,7 @@ function scanForClientComponents(dir, appDir, components) {
         const fullPath = path_1.default.join(dir, item.name);
         if (item.isDirectory()) {
             if (!item.name.startsWith('.') && item.name !== 'node_modules') {
-                scanForClientComponents(fullPath, appDir, components);
+                scanForClientComponents(fullPath, scanRoot, components, pathPrefix);
             }
         }
         else if (item.isFile()) {
@@ -116,13 +103,14 @@ function scanForClientComponents(dir, appDir, components) {
             try {
                 const source = fs_1.default.readFileSync(fullPath, 'utf-8');
                 if (hasClientDirective(source)) {
-                    const relativePath = path_1.default.relative(appDir, fullPath);
-                    const moduleId = generateModuleId(relativePath);
+                    const relativePathBase = (0, component_identity_1.relativeComponentPath)(scanRoot, fullPath);
+                    const relativePath = pathPrefix ? `${pathPrefix}${relativePathBase}` : relativePathBase;
+                    const moduleId = (0, component_identity_1.createComponentId)('client', relativePath);
                     components.push({
                         id: moduleId,
                         path: relativePath,
                         absolutePath: fullPath,
-                        chunkName: generateChunkName(relativePath),
+                        chunkName: (0, component_identity_1.createChunkName)(relativePath),
                         exports: extractExports(source),
                         async: false,
                     });
@@ -138,17 +126,30 @@ function scanForClientComponents(dir, appDir, components) {
  * Generate the client component manifest
  */
 function generateClientManifest(cwd, appDir) {
+    return generateClientManifestWithRoots(cwd, appDir);
+}
+function generateClientManifestWithRoots(cwd, appDir, additionalRoots = []) {
     const components = [];
     scanForClientComponents(appDir, appDir, components);
+    for (const root of additionalRoots) {
+        if (!fs_1.default.existsSync(root.dir))
+            continue;
+        scanForClientComponents(root.dir, root.dir, components, root.prefix || '');
+    }
     const clientModules = {};
     const pathToId = {};
     const ssrModuleMapping = {};
     for (const component of components) {
         clientModules[component.id] = component;
+        const normalizedRelativePath = (0, component_identity_1.normalizeComponentPath)(component.path);
+        const normalizedAbsolutePath = (0, component_identity_1.normalizeComponentPath)(component.absolutePath);
         pathToId[component.path] = component.id;
+        pathToId[normalizedRelativePath] = component.id;
         pathToId[component.absolutePath] = component.id;
+        pathToId[normalizedAbsolutePath] = component.id;
         // Map server path to client chunk for SSR
         ssrModuleMapping[component.absolutePath] = `/_vista/static/chunks/${component.chunkName}.js`;
+        ssrModuleMapping[normalizedAbsolutePath] = `/_vista/static/chunks/${component.chunkName}.js`;
     }
     // Get or generate build ID
     const buildIdPath = path_1.default.join(cwd, '.vista', 'BUILD_ID');

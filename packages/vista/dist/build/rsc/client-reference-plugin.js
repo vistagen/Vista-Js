@@ -23,42 +23,13 @@ const webpack_1 = __importDefault(require("webpack"));
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 /**
- * Virtual module that provides server component proxies
- * These proxies throw helpful errors when server components are incorrectly used client-side
- */
-const SERVER_COMPONENT_PROXY = `
-// Vista Server Component Proxy
-// This module is injected when a client bundle tries to import a server component
-
-export function createServerComponentProxy(id, name) {
-    const proxy = function ServerComponentProxy(props) {
-        throw new Error(
-            \`[Vista] Cannot render server component "\${name}" on the client.\n\` +
-            \`Server components can only be rendered on the server.\n\n\` +
-            \`To fix this:\n\` +
-            \`1. If you need interactivity, add 'client load' at the top of the component file\n\` +
-            \`2. If passing as children, ensure the parent is a client component\n\` +
-            \`\nComponent ID: \${id}\`
-        );
-    };
-    
-    proxy.$$typeof = Symbol.for('vista.server.reference');
-    proxy.$$id = id;
-    proxy.$$name = name;
-    
-    return proxy;
-}
-
-export default createServerComponentProxy;
-`;
-/**
- * Check if a file is a client component by reading 'client load' directive
+ * Check if a file is a client component by reading 'use client' directive
  */
 function isClientComponent(filePath) {
     try {
         const content = fs_1.default.readFileSync(filePath, 'utf-8');
         const trimmed = content.trim();
-        return trimmed.startsWith("'client load'") || trimmed.startsWith('"client load"');
+        return trimmed.startsWith("'use client'") || trimmed.startsWith('"use client"');
     }
     catch {
         return false;
@@ -142,13 +113,17 @@ class ClientReferencePlugin {
                 },
             ],
         });
-        // Generate client reference manifest for runtime
-        compiler.hooks.emit.tap(pluginName, (compilation) => {
-            if (this.clientManifest) {
+        compiler.hooks.compilation.tap(pluginName, (compilation) => {
+            compilation.hooks.processAssets.tap({
+                name: pluginName,
+                stage: webpack_1.default.Compilation.PROCESS_ASSETS_STAGE_ADDITIONAL,
+            }, () => {
+                if (!this.clientManifest)
+                    return;
                 const runtimeManifest = this.generateRuntimeManifest();
                 const manifestSource = JSON.stringify(runtimeManifest, null, 2);
                 compilation.emitAsset('client-reference-manifest.json', new webpack_1.default.sources.RawSource(manifestSource));
-            }
+            });
         });
     }
     loadManifest() {

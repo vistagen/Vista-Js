@@ -236,9 +236,12 @@ pub fn decode_rsc_payload(bytes: &[u8]) -> Option<RSCPayload> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    static TEST_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
     
     #[test]
     fn test_generate_mount_id() {
+        let _guard = TEST_MUTEX.lock().unwrap();
         reset_mount_counter();
         assert_eq!(generate_mount_id(), "__vista_cc_0");
         assert_eq!(generate_mount_id(), "__vista_cc_1");
@@ -266,6 +269,7 @@ mod tests {
     
     #[test]
     fn test_create_client_reference() {
+        let _guard = TEST_MUTEX.lock().unwrap();
         reset_mount_counter();
         
         let mut props = HashMap::new();

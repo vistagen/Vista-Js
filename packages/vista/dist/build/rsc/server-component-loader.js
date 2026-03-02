@@ -5,7 +5,7 @@
  * Webpack loader that transforms server component imports in client bundles.
  *
  * When a server component is imported in a client bundle:
- * 1. The loader detects if the file has 'client load' directive
+ * 1. The loader detects if the file has 'use client' directive
  * 2. If NOT a client component, replace the module with a proxy
  * 3. The proxy provides helpful error messages when misused
  */
@@ -16,11 +16,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.default = serverComponentLoader;
 const path_1 = __importDefault(require("path"));
 /**
- * Check if source has 'client load' directive
+ * Check if source has 'use client' directive
  */
 function hasClientDirective(source) {
     const trimmed = source.trim();
-    return trimmed.startsWith("'client load'") || trimmed.startsWith('"client load"');
+    return trimmed.startsWith("'use client'") || trimmed.startsWith('"use client"');
 }
 /**
  * Extract the component name from exports
@@ -83,7 +83,7 @@ function ServerComponentError(props) {
         console.error(
             \`[Vista RSC] Attempted to render server component "\${componentName}" on the client.\`,
             \`\\nServer components can only be rendered on the server.\`,
-            \`\\nTo fix: add 'client load' at the top of the file if you need client-side interactivity.\`
+            \`\\nTo fix: add 'use client' at the top of the file if you need client-side interactivity.\`
         );
     }
     
@@ -104,7 +104,7 @@ function ServerComponentError(props) {
                 \`Component "\${componentName}" is a Server Component and cannot be rendered on the client.\`
             ),
             React.createElement('p', { key: 'fix', style: { margin: 0, fontSize: '12px' } }, 
-                "Add 'client load' at the top of the file to make it a Client Component."
+                "Add 'use client' at the top of the file to make it a Client Component."
             ),
         ]);
     }

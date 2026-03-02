@@ -1,4 +1,4 @@
-'client load';
+'use client';
 "use strict";
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -75,7 +75,7 @@ function Router({ routeTree, initialPath }) {
         },
         refresh: () => window.dispatchEvent(new PopStateEvent('popstate')),
         params: match.params,
-        pathname: currentPath
+        pathname: currentPath,
     }), [currentPath, match.params]);
     // Render Component Tree
     // Stack: [RootLayout, Layout2, Layout3, Page]
@@ -83,26 +83,35 @@ function Router({ routeTree, initialPath }) {
     if (!content && match.NotFoundComponent) {
         content = (0, jsx_runtime_1.jsx)(match.NotFoundComponent, {});
     }
-    // Wrap in layouts (reverse order)
+    // Wrap in layouts from innermost to outermost.
+    // Using stable keys based on segment path ensures React preserves shared
+    // layout instances across navigations (e.g. /dashboard/settings → /dashboard/profile
+    // keeps the dashboard layout mounted instead of remounting it).
     for (let i = match.layouts.length - 1; i >= 0; i--) {
         const Layout = match.layouts[i];
+        const layoutKey = match.layoutKeys[i] || `layout-${i}`;
         if (Layout) {
-            content = (0, jsx_runtime_1.jsx)(Layout, { params: match.params, children: content });
+            content = ((0, jsx_runtime_1.jsx)(Layout, { params: match.params, children: content }, layoutKey));
         }
     }
-    return ((0, jsx_runtime_1.jsx)(exports.RouterContext.Provider, { value: routerValue, children: content }));
+    return (0, jsx_runtime_1.jsx)(exports.RouterContext.Provider, { value: routerValue, children: content });
 }
 function matchRoute(root, path) {
     const segments = path.split('/').filter(Boolean);
     const params = {};
     const layouts = [];
+    const layoutKeys = [];
+    // Track the cumulative segment path for stable layout keys
+    let currentKeyPath = '/';
     // Nearest NotFound found during traversal (propagates down)
     let nearestNotFound = root.notFound || null;
     // Helper to traverse
     function traverse(node, segmentIndex) {
-        // Collect Layout
-        if (node.layout)
+        // Collect Layout with a stable key
+        if (node.layout) {
             layouts.push(node.layout);
+            layoutKeys.push(currentKeyPath);
+        }
         if (node.notFound)
             nearestNotFound = node.notFound;
         // If we processed all segments, check for index page
@@ -112,8 +121,28 @@ function matchRoute(root, path) {
                     PageComponent: node.index,
                     NotFoundComponent: nearestNotFound,
                     layouts,
-                    params
+                    layoutKeys,
+                    params,
                 };
+            }
+            // Check for optional catch-all children that match zero segments
+            if (node.children) {
+                for (const child of node.children) {
+                    if (child.kind === 'optional-catch-all' && child.index) {
+                        params[child.segment] = '';
+                        if (child.layout) {
+                            layouts.push(child.layout);
+                            layoutKeys.push(currentKeyPath + '[...' + child.segment + ']');
+                        }
+                        return {
+                            PageComponent: child.index,
+                            NotFoundComponent: nearestNotFound,
+                            layouts,
+                            layoutKeys,
+                            params,
+                        };
+                    }
+                }
             }
             // No index page here -> 404
             return null;
@@ -121,6 +150,17 @@ function matchRoute(root, path) {
         const currentSegment = segments[segmentIndex];
         // Find matching child
         if (node.children) {
+            // Traverse groups transparently (they don't consume a URL segment)
+            for (const child of node.children) {
+                if (child.kind === 'group') {
+                    const savedKeyPath = currentKeyPath;
+                    currentKeyPath = currentKeyPath + '(' + child.segment + ')/';
+                    const result = traverse(child, segmentIndex);
+                    if (result)
+                        return result;
+                    currentKeyPath = savedKeyPath;
+                }
+            }
             for (const child of node.children) {
                 let isMatch = false;
                 if (child.kind === 'static' && child.segment === currentSegment) {
@@ -134,25 +174,45 @@ function matchRoute(root, path) {
                     isMatch = true;
                     const catchAll = segments.slice(segmentIndex).join('/');
                     params[child.segment] = catchAll;
-                    // Catch-all consumes 'rest'
-                    // Recursively match index of catch-all node?? 
-                    // Simplified: just match if it has a page
                     if (child.index) {
-                        if (child.layout)
+                        if (child.layout) {
                             layouts.push(child.layout);
+                            layoutKeys.push(currentKeyPath + '[...' + child.segment + ']');
+                        }
                         return {
                             PageComponent: child.index,
                             NotFoundComponent: nearestNotFound,
                             layouts,
-                            params
+                            layoutKeys,
+                            params,
                         };
                     }
                 }
-                if (isMatch) {
+                else if (child.kind === 'optional-catch-all') {
+                    isMatch = true;
+                    const catchAll = segments.slice(segmentIndex).join('/');
+                    params[child.segment] = catchAll;
+                    if (child.index) {
+                        if (child.layout) {
+                            layouts.push(child.layout);
+                            layoutKeys.push(currentKeyPath + '[[...' + child.segment + ']]');
+                        }
+                        return {
+                            PageComponent: child.index,
+                            NotFoundComponent: nearestNotFound,
+                            layouts,
+                            layoutKeys,
+                            params,
+                        };
+                    }
+                }
+                if (isMatch && child.kind !== 'group') {
+                    const savedKeyPath = currentKeyPath;
+                    currentKeyPath = currentKeyPath + child.segment + '/';
                     const result = traverse(child, segmentIndex + 1);
                     if (result)
                         return result;
-                    // Backtrack params if needed (simple implementation ignores backtracking cleanup for now)
+                    currentKeyPath = savedKeyPath;
                 }
             }
         }
@@ -166,7 +226,8 @@ function matchRoute(root, path) {
         PageComponent: null,
         NotFoundComponent: nearestNotFound,
         layouts,
-        params
+        layoutKeys,
+        params,
     };
 }
 // --- Hooks ---

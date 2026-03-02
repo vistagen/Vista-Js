@@ -1,6 +1,6 @@
 //! Client Directive Transform
 //! 
-//! Detects `'client load'` directive at the top of files
+//! Detects `'use client'` directive at the top of files
 //! and marks them as client components.
 
 use rustc_hash::FxHashSet;
@@ -9,14 +9,14 @@ use serde::{Deserialize, Serialize};
 /// Configuration for client directive detection
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ClientDirectiveConfig {
-    /// The directive string to look for (default: "client load")
+    /// The directive string to look for (default: "use client")
     pub directive: String,
 }
 
 impl ClientDirectiveConfig {
     pub fn new() -> Self {
         Self {
-            directive: "client load".to_string(),
+            directive: "use client".to_string(),
         }
     }
 }
@@ -48,18 +48,18 @@ pub fn has_client_directive(source: &str) -> bool {
     let trimmed = source.trim_start();
     
     // Check for string literal directive at the start
-    if trimmed.starts_with("'client load'") || trimmed.starts_with("\"client load\"") {
+    if trimmed.starts_with("'use client'") || trimmed.starts_with("\"use client\"") {
         return true;
     }
     
-    // Also check for directive without quotes on first non-empty line
+    // Also check first significant line.
+    // The directive is valid only when it is the first non-empty line.
     for line in source.lines() {
         let line = line.trim();
-        if line.is_empty() || line.starts_with("//") {
-            continue; // Skip empty lines and comments
+        if line.is_empty() {
+            continue;
         }
-        // Check if first significant line is the directive
-        return line.starts_with("'client load'") || line.starts_with("\"client load\"");
+        return line.starts_with("'use client'") || line.starts_with("\"use client\"");
     }
     
     false
@@ -72,7 +72,7 @@ pub fn detect_client_directive_fast(source: &str) -> ClientDirectiveResult {
         // Find the actual line number
         for (idx, line) in source.lines().enumerate() {
             let line = line.trim();
-            if line.starts_with("'client load'") || line.starts_with("\"client load\"") {
+            if line.starts_with("'use client'") || line.starts_with("\"use client\"") {
                 return ClientDirectiveResult {
                     is_client: true,
                     directive_line: idx + 1, // 1-indexed
@@ -148,20 +148,20 @@ mod tests {
 
     #[test]
     fn test_has_client_directive() {
-        assert!(has_client_directive("'client load';\nexport default function() {}"));
-        assert!(has_client_directive("\"client load\";\nexport default function() {}"));
-        assert!(has_client_directive("  'client load'\n"));
+        assert!(has_client_directive("'use client';\nexport default function() {}"));
+        assert!(has_client_directive("\"use client\";\nexport default function() {}"));
+        assert!(has_client_directive("  'use client'\n"));
         assert!(!has_client_directive("export default function() {}"));
-        assert!(!has_client_directive("// comment\n'client load'")); // directive not on first significant line
+        assert!(!has_client_directive("// comment\n'use client'")); // directive not on first significant line
     }
 
     #[test]
     fn test_detect_fast() {
-        let result = detect_client_directive_fast("'client load';\n");
+        let result = detect_client_directive_fast("'use client';\n");
         assert!(result.is_client);
         assert_eq!(result.directive_line, 1);
         
-        let result2 = detect_client_directive_fast("\n\n'client load'\n");
+        let result2 = detect_client_directive_fast("\n\n'use client'\n");
         assert!(result2.is_client);
         assert_eq!(result2.directive_line, 3);
     }
@@ -169,7 +169,7 @@ mod tests {
     #[test]
     fn test_analyze_exports() {
         let source = r#"
-'client load';
+'use client';
 
 export default function MyComponent() {
     return <div>Hello</div>;

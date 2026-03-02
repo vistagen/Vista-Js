@@ -1,4 +1,4 @@
-'client load';
+'use client';
 
 import { useState, useEffect } from 'react';
 import Image from 'vista/image';

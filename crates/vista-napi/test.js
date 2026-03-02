@@ -8,7 +8,7 @@ console.log('Version:', vistaNative.version());
 console.log('');
 
 // Test: Client component detection
-const clientSource = `'client load';
+const clientSource = `'use client';
 
 export default function Counter() {
     return <div>Hello</div>;
@@ -21,7 +21,7 @@ const serverSource = `export default function Page() {
 `;
 
 console.log('Test 1: Client component');
-console.log('  Input: Component with "client load" directive');
+console.log('  Input: Component with "use client" directive');
 console.log('  Result:', vistaNative.isClientComponent(clientSource));
 console.log('  Expected: true');
 console.log('');

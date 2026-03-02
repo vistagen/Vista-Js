@@ -3,8 +3,12 @@
  *
  * Provides hooks for reading route information.
  * Similar to Next.js navigation hooks.
+ *
+ * When inside an RSCRouter these hooks read from the shared RSC
+ * navigation context. Otherwise they fall back to popstate listeners
+ * (legacy mode).
  */
-'client load';
+'use client';
 "use strict";
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -48,10 +52,16 @@ exports.useSelectedLayoutSegment = useSelectedLayoutSegment;
 exports.useSelectedLayoutSegments = useSelectedLayoutSegments;
 const React = __importStar(require("react"));
 const context_1 = require("../router/context");
+const rsc_router_1 = require("./rsc-router");
 /**
- * Returns the current pathname
+ * Returns the current pathname.
+ * Uses the RSC router context when available, otherwise listens
+ * to popstate events.
  */
 function usePathname() {
+    const rscCtx = React.useContext(rsc_router_1.RSCRouterContext);
+    if (rscCtx)
+        return rscCtx.pathname;
     const [pathname, setPathname] = React.useState(() => typeof window !== 'undefined' ? window.location.pathname : '/');
     React.useEffect(() => {
         const handlePopState = () => {
@@ -63,9 +73,13 @@ function usePathname() {
     return pathname;
 }
 /**
- * Returns the current search params
+ * Returns the current search params.
+ * Uses the RSC router context when available.
  */
 function useSearchParams() {
+    const rscCtx = React.useContext(rsc_router_1.RSCRouterContext);
+    if (rscCtx)
+        return rscCtx.searchParams;
     const [searchParams, setSearchParams] = React.useState(() => typeof window !== 'undefined'
         ? new URLSearchParams(window.location.search)
         : new URLSearchParams());
@@ -79,7 +93,7 @@ function useSearchParams() {
     return searchParams;
 }
 /**
- * Returns dynamic route parameters
+ * Returns dynamic route parameters.
  * For route /users/[id]/posts/[postId], returns { id: '123', postId: '456' }
  */
 function useParams() {

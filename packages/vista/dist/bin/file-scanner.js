@@ -7,8 +7,8 @@
  *
  * Server Component Rules:
  * - By default, all components are Server Components
- * - Using 'client load' directive makes it a Client Component
- * - Using client hooks (useState, useEffect, etc.) without 'client load' is an ERROR
+ * - Using 'use client' directive makes it a Client Component
+ * - Using client hooks (useState, useEffect, etc.) without 'use client' is an ERROR
  *
  * Performance: Uses Rust-powered RSC scanner when available (~10-100x faster)
  */
@@ -53,7 +53,15 @@ exports.getVersion = getVersion;
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const native_scanner_1 = require("../build/rsc/native-scanner");
+const RESERVED_INTERNAL_SEGMENTS = new Set(['[not-found]']);
+function hasReservedInternalSegment(relativePath) {
+    return relativePath
+        .replace(/\\/g, '/')
+        .split('/')
+        .some((segment) => RESERVED_INTERNAL_SEGMENTS.has(segment));
+}
 // Try to load Rust NAPI bindings, fallback to JS if not available
+const _debug = !!process.env.VISTA_DEBUG;
 let rustNative = null;
 try {
     // Try multiple paths since we might be running from src or dist
@@ -68,35 +76,61 @@ try {
     for (const p of possiblePaths) {
         try {
             rustNative = require(p);
-            console.log(`[Vista] Loaded Rust native bindings from ${p}`);
+            if (_debug)
+                console.log(`[Vista JS] Loaded Rust native bindings from ${p}`);
             break;
         }
         catch (e) {
             // Try next path
         }
     }
-    if (!rustNative) {
-        console.log('[Vista] Rust native bindings not found, using JS fallback');
+    if (!rustNative && _debug) {
+        console.log('[Vista JS] Rust native bindings not found, using JS fallback');
     }
 }
 catch (e) {
-    console.log('[Vista] Rust native bindings not found, using JS fallback');
+    if (_debug)
+        console.log('[Vista JS] Rust native bindings not found, using JS fallback');
+}
+function isReservedRouteNode(node) {
+    return node.kind === 'dynamic' && node.segment === 'not-found';
+}
+function pruneReservedRouteNodes(node) {
+    return {
+        ...node,
+        children: node.children
+            .filter((child) => !isReservedRouteNode(child))
+            .map((child) => pruneReservedRouteNodes(child)),
+    };
 }
 function getRouteTree(appDir) {
     if (rustNative && rustNative.getRouteTree) {
-        return rustNative.getRouteTree(appDir);
+        const nativeTree = rustNative.getRouteTree(appDir);
+        return pruneReservedRouteNodes(nativeTree);
     }
     // JS Fallback - build route tree from file system
     return buildRouteTreeJS(appDir, appDir);
+}
+function classifySegment(segment) {
+    if (segment.startsWith('[[...') && segment.endsWith(']]'))
+        return 'optional-catch-all';
+    if (segment.startsWith('[...'))
+        return 'catch-all';
+    if (segment.startsWith('(') && segment.endsWith(')'))
+        return 'group';
+    if (segment.startsWith('['))
+        return 'dynamic';
+    return 'static';
 }
 /**
  * JS Fallback for building route tree when Rust bindings are unavailable
  */
 function buildRouteTreeJS(dir, appDir) {
     const segment = dir === appDir ? '' : path.basename(dir);
+    const kind = classifySegment(segment);
     const node = {
-        segment,
-        kind: segment.startsWith('[...') ? 'catch-all' : segment.startsWith('[') ? 'dynamic' : 'static',
+        segment: kind === 'group' ? '' : segment,
+        kind,
         children: [],
     };
     if (!fs.existsSync(dir)) {
@@ -106,7 +140,9 @@ function buildRouteTreeJS(dir, appDir) {
     for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
-            if (!entry.name.startsWith('.') && entry.name !== 'node_modules') {
+            if (!entry.name.startsWith('.') &&
+                entry.name !== 'node_modules' &&
+                !RESERVED_INTERNAL_SEGMENTS.has(entry.name)) {
                 node.children.push(buildRouteTreeJS(fullPath, appDir));
             }
         }
@@ -116,8 +152,14 @@ function buildRouteTreeJS(dir, appDir) {
             if (basename === 'index' || basename === 'page') {
                 node.indexPath = relativePath;
             }
-            else if (basename === 'layout' || basename === 'root') {
+            else if (basename === 'root') {
                 node.layoutPath = relativePath;
+            }
+            else if (basename === 'layout') {
+                // Prefer root.* when both root.* and layout.* exist in same segment.
+                if (!node.layoutPath) {
+                    node.layoutPath = relativePath;
+                }
             }
             else if (basename === 'loading') {
                 node.loadingPath = relativePath;
@@ -132,7 +174,7 @@ function buildRouteTreeJS(dir, appDir) {
     }
     return node;
 }
-// Client-only hooks and APIs that require 'client load' directive
+// Client-only hooks and APIs that require 'use client' directive
 const CLIENT_HOOKS = [
     'useState',
     'useEffect',
@@ -179,34 +221,33 @@ const BROWSER_APIS = [
  * Fast check using Rust if available, else JS fallback
  */
 function isClientComponent(source) {
-    if (rustNative) {
+    const trimmed = source.trimStart();
+    if (trimmed.startsWith("'use client'") || trimmed.startsWith('"use client"')) {
+        return true;
+    }
+    if (rustNative?.isClientComponent) {
         return rustNative.isClientComponent(source);
     }
-    // JS Fallback
-    const trimmed = source.trim();
-    return trimmed.startsWith("'client load'") || trimmed.startsWith('"client load"');
+    return false;
 }
 /**
  * Analyze directive with line number
  */
 function analyzeClientDirective(source) {
-    if (rustNative) {
+    const lines = source.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (line.length === 0)
+            continue;
+        if (line.startsWith("'use client'") || line.startsWith('"use client"')) {
+            return { isClient: true, directiveLine: i + 1 };
+        }
+        break;
+    }
+    if (rustNative?.analyzeClientDirective) {
         return rustNative.analyzeClientDirective(source);
     }
-    // JS Fallback
-    const isClient = isClientComponent(source);
-    let directiveLine = 0;
-    if (isClient) {
-        const lines = source.split('\n');
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (line.startsWith("'client load'") || line.startsWith('"client load"')) {
-                directiveLine = i + 1;
-                break;
-            }
-        }
-    }
-    return { isClient, directiveLine };
+    return { isClient: false, directiveLine: 0 };
 }
 /**
  * Detect client-only hooks/APIs used in source
@@ -301,12 +342,12 @@ function scanDirectory(dir, baseDir, errors) {
             const clientHooksUsed = detectClientHooks(source);
             let hasError = false;
             let errorMessage;
-            // ERROR: Using client hooks without 'client load' directive
+            // ERROR: Using client hooks without 'use client' directive
             if (!analysis.isClient && clientHooksUsed.length > 0) {
                 hasError = true;
                 const hookList = clientHooksUsed.slice(0, 3).join(', ');
                 const more = clientHooksUsed.length > 3 ? ` and ${clientHooksUsed.length - 3} more` : '';
-                errorMessage = `Server Component Error: You're using ${hookList}${more} in a Server Component.\n\nTo fix this, add 'client load' at the top of your file to make it a Client Component:\n\n'client load';\n\nimport ...`;
+                errorMessage = `Server Component Error: You're using ${hookList}${more} in a Server Component.\n\nTo fix this, add 'use client' at the top of your file to make it a Client Component:\n\n'use client';\n\nimport ...`;
                 errors.push({
                     file: path.relative(baseDir, fullPath),
                     message: errorMessage,
@@ -326,6 +367,36 @@ function scanDirectory(dir, baseDir, errors) {
         }
     }
     return results;
+}
+function hasUseClientDirectiveInApp(appDir) {
+    const queue = [appDir];
+    while (queue.length > 0) {
+        const currentDir = queue.pop();
+        if (!fs.existsSync(currentDir))
+            continue;
+        const entries = fs.readdirSync(currentDir, { withFileTypes: true });
+        for (const entry of entries) {
+            const fullPath = path.join(currentDir, entry.name);
+            if (entry.isDirectory()) {
+                if (!entry.name.startsWith('.') && entry.name !== 'node_modules') {
+                    queue.push(fullPath);
+                }
+                continue;
+            }
+            if (!entry.isFile() || !/\.(tsx?|jsx?)$/.test(entry.name))
+                continue;
+            try {
+                const source = fs.readFileSync(fullPath, 'utf-8').trimStart();
+                if (source.startsWith("'use client'") || source.startsWith('"use client"')) {
+                    return true;
+                }
+            }
+            catch {
+                // ignore file read failures and continue
+            }
+        }
+    }
+    return false;
 }
 /**
  * Scan the app directory and return categorized files
@@ -369,7 +440,8 @@ function scanAppDirectory(appDir) {
                     hasError: false,
                     errorMessage: undefined,
                 })),
-                pages: nativeResult.pages.map((c) => ({
+                pages: nativeResult.pages
+                    .map((c) => ({
                     absolutePath: c.absolutePath,
                     relativePath: c.relativePath,
                     isClient: c.isClient,
@@ -378,14 +450,20 @@ function scanAppDirectory(appDir) {
                     clientHooksUsed: c.clientHooksUsed,
                     hasError: false,
                     errorMessage: undefined,
-                })),
+                }))
+                    .filter((page) => !hasReservedInternalSegment(page.relativePath)),
                 errors: nativeResult.errors.map((e) => ({
                     file: e.file,
                     message: e.message,
                     hooks: e.hooks,
                 })),
             };
-            return result;
+            if (result.clientComponents.length > 0 || !hasUseClientDirectiveInApp(appDir)) {
+                return result;
+            }
+            if (process.env.VISTA_DEBUG) {
+                console.warn('[Vista RSC] Native scanner missed "use client" directives. Falling back to JS scanner.');
+            }
         }
     }
     // Fallback to JS-based scanner
@@ -405,7 +483,9 @@ function scanAppDirectory(appDir) {
             result.layouts.push(file);
         }
         else if (basename === 'index' || basename === 'page') {
-            result.pages.push(file);
+            if (!hasReservedInternalSegment(file.relativePath)) {
+                result.pages.push(file);
+            }
         }
         else if (basename === 'not-found') {
             result.notFound = file;

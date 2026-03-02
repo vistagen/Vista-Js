@@ -17,6 +17,11 @@ export interface VistaError {
 interface ErrorOverlayProps {
     errors: VistaError[];
 }
+/**
+ * Render a full HTML error page.
+ * Engines should send this directly: `res.status(500).send(renderErrorHTML(...))`.
+ */
+export declare function renderErrorHTML(errors: VistaError[]): string;
 export declare function ErrorOverlay({ errors }: ErrorOverlayProps): React.ReactElement;
 export declare class DevErrorBoundary extends React.Component<{
     children: React.ReactNode;

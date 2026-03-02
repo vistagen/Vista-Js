@@ -2,7 +2,7 @@
  * Vista Server Component Webpack Plugin
  *
  * Checks for server component violations on every webpack compilation.
- * Fails the build if client hooks are used without 'client load' directive.
+ * Fails the build if client hooks are used without 'use client' directive.
  */
 import type { Compiler } from 'webpack';
 export declare class VistaServerComponentPlugin {

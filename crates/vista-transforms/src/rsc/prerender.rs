@@ -71,7 +71,7 @@ pub fn prerender_client_component(file_path: &str) -> Option<PrerenderedComponen
     let content = fs::read_to_string(file_path).ok()?;
     
     // Check if it's a client component
-    if !content.starts_with("'client load'") && !content.starts_with("\"client load\"") {
+    if !content.starts_with("'use client'") && !content.starts_with("\"use client\"") {
         return None;
     }
     
@@ -97,8 +97,7 @@ pub fn prerender_client_component(file_path: &str) -> Option<PrerenderedComponen
 /// Extract JSX structure and styles from component code
 fn extract_jsx_structure(content: &str) -> (ExtractedStyles, String, u32, Option<u32>) {
     let mut styles = ExtractedStyles::default();
-    let mut estimated_height: u32 = 180; // Default height
-    let mut estimated_width: Option<u32> = None;
+    let estimated_width: Option<u32> = None;
     
     // Parse style objects from the code
     // Look for style={{ ... }} patterns
@@ -108,12 +107,6 @@ fn extract_jsx_structure(content: &str) -> (ExtractedStyles, String, u32, Option
             let style_content = &after_style[..style_end];
             styles = parse_style_object(style_content);
             
-            // Calculate height from padding and content
-            if let Some(ref padding) = styles.padding {
-                if let Some(px) = parse_px_value(padding) {
-                    estimated_height = estimated_height.saturating_add(px * 2);
-                }
-            }
         }
     }
     
@@ -124,7 +117,7 @@ fn extract_jsx_structure(content: &str) -> (ExtractedStyles, String, u32, Option
     let div_count = content.matches("<div").count().saturating_sub(1); // Exclude root
     
     // Estimate height based on content
-    estimated_height = 40 // Base padding
+    let estimated_height = 40 // Base padding
         + (h2_count as u32 * 40)  // ~40px per heading
         + (p_count as u32 * 60)    // ~60px per paragraph (including large text)
         + (button_count as u32 * 50) / 2  // Buttons often side by side
@@ -191,11 +184,6 @@ fn parse_style_object(content: &str) -> ExtractedStyles {
     }
     
     styles
-}
-
-/// Parse a pixel value like "20px" into a number
-fn parse_px_value(value: &str) -> Option<u32> {
-    value.trim_end_matches("px").parse().ok()
 }
 
 /// Generate placeholder HTML that matches the component structure
@@ -283,7 +271,7 @@ mod tests {
         "#;
         
         let parsed = parse_style_object(style);
-        assert_eq!(parsed.padding, Some("'20px'".to_string()));
-        assert_eq!(parsed.background_color, Some("'#1a1a2e'".to_string()));
+        assert_eq!(parsed.padding, Some("20px".to_string()));
+        assert_eq!(parsed.background_color, Some("#1a1a2e".to_string()));
     }
 }
