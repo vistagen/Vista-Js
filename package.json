@@ -8,9 +8,10 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "turbo run test && pnpm run guard:create-vista-command && pnpm run test:hardening",
+    "test": "turbo run test && pnpm run guard:create-vista-command && pnpm run test:hardening && pnpm run test:regression",
     "guard:create-vista-command": "node scripts/check-create-vista-command.cjs",
     "test:hardening": "node scripts/test-vista-hardening.cjs",
+    "test:regression": "node scripts/test-regression.cjs",
     "clean": "turbo run clean",
     "prepare": "husky install"
   },

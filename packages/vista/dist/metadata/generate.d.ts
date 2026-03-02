@@ -14,7 +14,7 @@ export interface MetadataRendererProps {
  * Renders metadata as React head elements.
  * Returns an array of elements to be placed in <head>.
  */
-export declare function MetadataRenderer({ metadata, parentTemplate }: MetadataRendererProps): React.ReactElement;
+export declare function MetadataRenderer({ metadata, parentTemplate, }: MetadataRendererProps): React.ReactElement;
 /**
  * Converts metadata to HTML string for SSR injection.
  */

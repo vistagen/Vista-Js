@@ -252,7 +252,9 @@ function generateIconLinks(icons) {
             iconList.forEach((icon, index) => addIcon(icon, 'icon', index));
         }
         if (iconsObj.shortcut) {
-            const shortcutList = Array.isArray(iconsObj.shortcut) ? iconsObj.shortcut : [iconsObj.shortcut];
+            const shortcutList = Array.isArray(iconsObj.shortcut)
+                ? iconsObj.shortcut
+                : [iconsObj.shortcut];
             shortcutList.forEach((icon, index) => addIcon(icon, 'shortcut icon', index));
         }
         if (iconsObj.apple) {
@@ -309,7 +311,7 @@ function generateAlternateLinks(alternates, base) {
  * Renders metadata as React head elements.
  * Returns an array of elements to be placed in <head>.
  */
-function MetadataRenderer({ metadata, parentTemplate }) {
+function MetadataRenderer({ metadata, parentTemplate, }) {
     const base = metadata.metadataBase;
     const title = resolveTitle(metadata.title, parentTemplate);
     return ((0, jsx_runtime_1.jsxs)(jsx_runtime_1.Fragment, { children: [title && (0, jsx_runtime_1.jsx)("title", { children: title }), generateBasicMeta(metadata), generateAuthorMeta(metadata.authors), generateRobotsMeta(metadata.robots), generateOpenGraphMeta(metadata.openGraph, base), generateTwitterMeta(metadata.twitter), generateIconLinks(metadata.icons), generateVerificationMeta(metadata.verification), generateAlternateLinks(metadata.alternates, base), metadata.manifest && ((0, jsx_runtime_1.jsx)("link", { rel: "manifest", href: resolveUrl(metadata.manifest, base) || '' }))] }));
@@ -318,6 +320,8 @@ function MetadataRenderer({ metadata, parentTemplate }) {
  * Converts metadata to HTML string for SSR injection.
  */
 function generateMetadataHtml(metadata, parentTemplate) {
+    if (!metadata || typeof metadata !== 'object')
+        return '';
     const { renderToStaticMarkup } = require('react-dom/server');
     return renderToStaticMarkup((0, jsx_runtime_1.jsx)(MetadataRenderer, { metadata: metadata, parentTemplate: parentTemplate }));
 }

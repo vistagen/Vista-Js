@@ -324,7 +324,9 @@ export function renderErrorHTML(errors: VistaError[]): string {
     (function() {
       function connect() {
         var es = new EventSource('/__vista_reload');
-        es.onmessage = function() { window.location.reload(); };
+        es.onmessage = function(e) {
+          if (e.data && e.data !== 'connected') window.location.reload();
+        };
         es.onerror = function() {
           es.close();
           setTimeout(connect, 1500);

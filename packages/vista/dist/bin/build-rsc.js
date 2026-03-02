@@ -88,10 +88,6 @@ hydrateRoot(
   })
 );
 
-if ((module as any).hot) {
-  (module as any).hot.accept();
-}
-
 // Vista live-reload: listen for server component changes via SSE
 (function connectReload() {
   const es = new EventSource('/__vista_reload');

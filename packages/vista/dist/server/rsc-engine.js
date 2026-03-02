@@ -20,7 +20,6 @@ const express_1 = __importDefault(require("express"));
 const react_1 = __importDefault(require("react"));
 const server_1 = require("react-dom/server");
 const webpack_dev_middleware_1 = __importDefault(require("webpack-dev-middleware"));
-const webpack_hot_middleware_1 = __importDefault(require("webpack-hot-middleware"));
 const stream_1 = require("stream");
 const child_process_1 = require("child_process");
 const url_1 = require("url");
@@ -28,6 +27,7 @@ const middleware_runner_1 = require("./middleware-runner");
 const image_optimizer_1 = require("./image-optimizer");
 const registry_1 = require("../font/registry");
 const logger_1 = require("./logger");
+const not_found_page_1 = require("./not-found-page");
 const static_cache_1 = require("./static-cache");
 const static_generator_1 = require("./static-generator");
 const CjsModule = require('module');
@@ -217,13 +217,26 @@ function withTimeout(url, options = {}, timeoutMs = 3000) {
         throw error;
     });
 }
+function cleanHotUpdateFiles(cwd) {
+    const chunksDir = path_1.default.join(cwd, '.vista', 'static', 'chunks');
+    if (!fs_1.default.existsSync(chunksDir))
+        return;
+    for (const f of fs_1.default.readdirSync(chunksDir)) {
+        if (f.includes('.hot-update.')) {
+            try {
+                fs_1.default.unlinkSync(path_1.default.join(chunksDir, f));
+            }
+            catch { }
+        }
+    }
+}
 function findChunkFiles(cwd) {
     const chunksDir = path_1.default.join(cwd, '.vista', 'static', 'chunks');
     if (!fs_1.default.existsSync(chunksDir))
         return [];
     const files = fs_1.default
         .readdirSync(chunksDir)
-        .filter((name) => name.endsWith('.js') && !name.endsWith('.map'));
+        .filter((name) => name.endsWith('.js') && !name.endsWith('.map') && !name.includes('.hot-update.'));
     // Load webpack runtime first, then framework, then the rest alphabetically.
     // This ensures the chunk registry (__webpack_require__) is available before
     // any deferred chunk tries to self-register.
@@ -412,6 +425,7 @@ function createHtmlDocument(appHtml, metadataHtml, chunkFiles, rootMode = 'legac
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}html,body{height:100%;overflow:hidden}</style>
   ${metadataHtml}
   ${(0, registry_1.getAllFontHTML)()}
   ${getCSSLinks()}
@@ -507,8 +521,15 @@ async function renderFlightToHTMLStream(upstreamOrigin, pathname, search, metada
     const upstream = await withTimeout(flightUrl, {
         headers: { Accept: 'text/x-component' },
     }, 5000);
-    if (!upstream.ok) {
+    if (!upstream.ok && upstream.status !== 404) {
         throw new Error(`Upstream returned ${upstream.status}: ${await upstream.text()}`);
+    }
+    // Short-circuit 404: serve the styled standalone page directly
+    // (the Flight element is a bare <div> with no document shell, so streaming it
+    //  would produce HTML without <html>/<body> tags → browser default margins)
+    if (upstream.status === 404) {
+        res.status(404).type('text/html').send((0, not_found_page_1.getStyledNotFoundHTML)());
+        return;
     }
     if (!upstream.body) {
         throw new Error('Upstream returned empty body');
@@ -606,6 +627,7 @@ function wrapInDocumentShell(bodyContent, metadataHtml, chunkFiles, rootMode) {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}html,body{height:100%;overflow:hidden}</style>
   ${metadataHtml}
   ${(0, registry_1.getAllFontHTML)()}
   ${getCSSLinks()}
@@ -622,6 +644,8 @@ function startRSCServer(options = {}) {
     const cwd = process.cwd();
     const isDev = process.env.NODE_ENV !== 'production';
     const vistaConfig = (0, config_1.loadConfig)(cwd);
+    // Clean stale hot-update files from previous runs
+    cleanHotUpdateFiles(cwd);
     // Request logger — logs GET/POST with timing
     app.use((0, logger_1.requestLogger)());
     const port = resolvePort(String(options.port || vistaConfig.server?.port || 3003), 3003);
@@ -829,11 +853,7 @@ function startRSCServer(options = {}) {
             stats: 'none',
             writeToDisk: true,
         }));
-        app.use((0, webpack_hot_middleware_1.default)(options.compiler, {
-            log: false,
-            path: '/__webpack_hmr',
-            heartbeat: 2000,
-        }));
+        // No webpack-hot-middleware — Vista uses SSE live-reload for RSC
         // Push compile errors/success to SSE clients
         options.compiler.hooks.done.tap('VistaRSCLiveReload', (stats) => {
             if (stats.hasErrors()) {
@@ -1182,7 +1202,7 @@ function startRSCServer(options = {}) {
                         .send(createHtmlDocument(html, '', findChunkFiles(cwd), rootLayout.mode));
                     return;
                 }
-                res.status(404).send('<h1>404 - Page Not Found</h1>');
+                res.status(404).type('text/html').send((0, not_found_page_1.getStyledNotFoundHTML)());
                 return;
             }
             const params = extractParams(req.path, route);
@@ -1214,7 +1234,7 @@ function startRSCServer(options = {}) {
                             .send(createHtmlDocument(html, '', findChunkFiles(cwd), rootLayout.mode));
                         return;
                     }
-                    res.status(404).send('<h1>404 - Page Not Found</h1>');
+                    res.status(404).type('text/html').send((0, not_found_page_1.getStyledNotFoundHTML)());
                     return;
                 }
                 catch (notFoundError) {

@@ -15,7 +15,6 @@ import React from 'react';
 import { renderToString, renderToPipeableStream } from 'react-dom/server';
 import webpack from 'webpack';
 import webpackDevMiddleware from 'webpack-dev-middleware';
-import webpackHotMiddleware from 'webpack-hot-middleware';
 import { Readable, Transform, PassThrough } from 'stream';
 import { type ReadableStream as NodeReadableStream } from 'node:stream/web';
 import { ChildProcessWithoutNullStreams, spawn } from 'child_process';
@@ -24,6 +23,7 @@ import { runMiddleware, applyMiddlewareResult } from './middleware-runner';
 import { createImageHandler } from './image-optimizer';
 import { getAllFontHTML as getFontHeadHTML } from '../font/registry';
 import { printServerReady, requestLogger, logInfo, logEvent, logError } from './logger';
+import { getStyledNotFoundHTML } from './not-found-page';
 import {
   getCachedPage,
   loadStaticPagesFromDisk,
@@ -265,13 +265,27 @@ function withTimeout(url: string, options: RequestInit = {}, timeoutMs = 3000): 
     });
 }
 
+function cleanHotUpdateFiles(cwd: string): void {
+  const chunksDir = path.join(cwd, '.vista', 'static', 'chunks');
+  if (!fs.existsSync(chunksDir)) return;
+  for (const f of fs.readdirSync(chunksDir)) {
+    if (f.includes('.hot-update.')) {
+      try {
+        fs.unlinkSync(path.join(chunksDir, f));
+      } catch {}
+    }
+  }
+}
+
 function findChunkFiles(cwd: string): string[] {
   const chunksDir = path.join(cwd, '.vista', 'static', 'chunks');
   if (!fs.existsSync(chunksDir)) return [];
 
   const files = fs
     .readdirSync(chunksDir)
-    .filter((name) => name.endsWith('.js') && !name.endsWith('.map'));
+    .filter(
+      (name) => name.endsWith('.js') && !name.endsWith('.map') && !name.includes('.hot-update.')
+    );
 
   // Load webpack runtime first, then framework, then the rest alphabetically.
   // This ensures the chunk registry (__webpack_require__) is available before
@@ -496,6 +510,7 @@ function createHtmlDocument(
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}html,body{height:100%;overflow:hidden}</style>
   ${metadataHtml}
   ${getFontHeadHTML()}
   ${getCSSLinks()}
@@ -622,8 +637,16 @@ async function renderFlightToHTMLStream(
     5000
   );
 
-  if (!upstream.ok) {
+  if (!upstream.ok && upstream.status !== 404) {
     throw new Error(`Upstream returned ${upstream.status}: ${await upstream.text()}`);
+  }
+
+  // Short-circuit 404: serve the styled standalone page directly
+  // (the Flight element is a bare <div> with no document shell, so streaming it
+  //  would produce HTML without <html>/<body> tags → browser default margins)
+  if (upstream.status === 404) {
+    res.status(404).type('text/html').send(getStyledNotFoundHTML());
+    return;
   }
 
   if (!upstream.body) {
@@ -748,6 +771,7 @@ function wrapInDocumentShell(
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}html,body{height:100%;overflow:hidden}</style>
   ${metadataHtml}
   ${getFontHeadHTML()}
   ${getCSSLinks()}
@@ -770,6 +794,9 @@ export function startRSCServer(options: RSCEngineOptions = {}): void {
   const cwd = process.cwd();
   const isDev = process.env.NODE_ENV !== 'production';
   const vistaConfig = loadConfig(cwd);
+
+  // Clean stale hot-update files from previous runs
+  cleanHotUpdateFiles(cwd);
 
   // Request logger — logs GET/POST with timing
   app.use(requestLogger());
@@ -1004,13 +1031,7 @@ export function startRSCServer(options: RSCEngineOptions = {}): void {
       })
     );
 
-    app.use(
-      webpackHotMiddleware(options.compiler, {
-        log: false,
-        path: '/__webpack_hmr',
-        heartbeat: 2000,
-      })
-    );
+    // No webpack-hot-middleware — Vista uses SSE live-reload for RSC
 
     // Push compile errors/success to SSE clients
     options.compiler.hooks.done.tap('VistaRSCLiveReload', (stats) => {
@@ -1432,7 +1453,7 @@ export function startRSCServer(options: RSCEngineOptions = {}): void {
             .send(createHtmlDocument(html, '', findChunkFiles(cwd), rootLayout.mode));
           return;
         }
-        res.status(404).send('<h1>404 - Page Not Found</h1>');
+        res.status(404).type('text/html').send(getStyledNotFoundHTML());
         return;
       }
 
@@ -1473,7 +1494,7 @@ export function startRSCServer(options: RSCEngineOptions = {}): void {
               .send(createHtmlDocument(html, '', findChunkFiles(cwd), rootLayout.mode));
             return;
           }
-          res.status(404).send('<h1>404 - Page Not Found</h1>');
+          res.status(404).type('text/html').send(getStyledNotFoundHTML());
           return;
         } catch (notFoundError) {
           console.error('[vista:rsc] Failed to render NotFoundError fallback:', notFoundError);

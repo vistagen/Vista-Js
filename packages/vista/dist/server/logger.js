@@ -104,10 +104,7 @@ function printServerReady(info) {
     if (networkUrl) {
         console.log(`  ${dim('┃')} ${bold('Network:')}      ${cyan(networkUrl)}`);
     }
-    console.log(`  ${dim('┃')} ${bold('Mode:')}         ${mode === 'rsc' ? magenta('RSC (React Server Components)') : green('SSR')}`);
-    if (mode === 'rsc' && info.rscFlight !== undefined) {
-        console.log(`  ${dim('┃')} ${bold('Flight SSR:')}   ${info.rscFlight ? green('Enabled (streaming)') : yellow('Disabled')}`);
-    }
+    // Mode/Flight details hidden — internal implementation detail
     console.log('');
     console.log(`  ${dim(`Ready in ${formatDuration(getStartupTime())}`)}`);
     console.log('');

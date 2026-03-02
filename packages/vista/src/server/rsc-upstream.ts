@@ -442,7 +442,54 @@ function startUpstream(): void {
             notFoundElement
           ) as React.ReactElement;
         } else {
-          model = React.createElement('h1', null, '404 - Page Not Found');
+          model = React.createElement(
+            'div',
+            {
+              style: {
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100vh',
+                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                background: '#0a0a0a',
+                color: '#ededed',
+                margin: 0,
+                overflow: 'hidden',
+                textAlign: 'center',
+                userSelect: 'none',
+              },
+            },
+            React.createElement(
+              'span',
+              {
+                style: {
+                  fontSize: '6rem',
+                  fontWeight: 800,
+                  letterSpacing: '-0.04em',
+                  lineHeight: 1,
+                  background: 'linear-gradient(135deg, #7c3aed, #2563eb, #06b6d4)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                },
+              },
+              '404'
+            ),
+            React.createElement(
+              'p',
+              {
+                style: {
+                  marginTop: '0.75rem',
+                  fontSize: '0.95rem',
+                  fontWeight: 400,
+                  color: '#555',
+                  letterSpacing: '0.02em',
+                },
+              },
+              "There's nothing here."
+            )
+          );
         }
 
         res.status(404);

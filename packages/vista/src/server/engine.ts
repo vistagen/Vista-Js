@@ -24,6 +24,7 @@ import { createImageHandler } from './image-optimizer';
 import { getCachedPage, loadStaticPagesFromDisk, isRevalidating } from './static-cache';
 import { revalidatePath } from './static-generator';
 import { getAllFontHTML as getFontHeadHTML } from '../font/registry';
+import { getStyledNotFoundHTML } from './not-found-page';
 import {
   printServerReady,
   requestLogger,
@@ -644,7 +645,7 @@ export function startServer(port: number = 3003, compiler?: webpack.Compiler) {
           );
           return;
         }
-        res.status(404).send('<h1>404 - Page Not Found</h1>');
+        res.status(404).type('text/html').send(getStyledNotFoundHTML());
         return;
       }
 
@@ -728,7 +729,7 @@ export function startServer(port: number = 3003, compiler?: webpack.Compiler) {
             );
             return;
           }
-          res.status(404).send('<h1>404 - Page Not Found</h1>');
+          res.status(404).type('text/html').send(getStyledNotFoundHTML());
           return;
         } catch (notFoundError) {
           console.error(

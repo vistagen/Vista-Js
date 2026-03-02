@@ -23,6 +23,7 @@ const middleware_runner_1 = require("./middleware-runner");
 const image_optimizer_1 = require("./image-optimizer");
 const static_cache_1 = require("./static-cache");
 const registry_1 = require("../font/registry");
+const not_found_page_1 = require("./not-found-page");
 const logger_1 = require("./logger");
 const structure_log_1 = require("./structure-log");
 // Support CSS imports on server runtime
@@ -534,7 +535,7 @@ function startServer(port = 3003, compiler) {
                     renderApp(req, res, resolvedNotFound.component, rootLayout.component, {}, { ...(rootLayout.metadata || {}), title: '404 Not Found' }, vistaConfig, 404, isDev, rootLayout.mode);
                     return;
                 }
-                res.status(404).send('<h1>404 - Page Not Found</h1>');
+                res.status(404).type('text/html').send((0, not_found_page_1.getStyledNotFoundHTML)());
                 return;
             }
             // Load Modules
@@ -587,7 +588,7 @@ function startServer(port = 3003, compiler) {
                         renderApp(req, res, resolvedNotFound.component, rootLayout.component, {}, { ...(rootLayout.metadata || {}), title: '404 Not Found' }, vistaConfig, 404, isDev, rootLayout.mode);
                         return;
                     }
-                    res.status(404).send('<h1>404 - Page Not Found</h1>');
+                    res.status(404).type('text/html').send((0, not_found_page_1.getStyledNotFoundHTML)());
                     return;
                 }
                 catch (notFoundError) {

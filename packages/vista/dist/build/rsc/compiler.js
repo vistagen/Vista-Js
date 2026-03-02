@@ -16,7 +16,6 @@ exports.runRSCBuild = runRSCBuild;
 const path_1 = __importDefault(require("path"));
 const webpack_1 = __importDefault(require("webpack"));
 const fs_1 = __importDefault(require("fs"));
-const react_refresh_webpack_plugin_1 = __importDefault(require("@pmmmwh/react-refresh-webpack-plugin"));
 const manifest_1 = require("../manifest");
 const client_manifest_1 = require("./client-manifest");
 const server_manifest_1 = require("./server-manifest");
@@ -212,12 +211,8 @@ function createClientWebpackConfig(options) {
         mode: isDev ? 'development' : 'production',
         name: 'client',
         target: 'web',
-        entry: isDev
-            ? [
-                require.resolve('webpack-hot-middleware/client') + '?reload=true&overlay=false',
-                clientEntry,
-            ]
-            : clientEntry,
+        // No webpack-hot-middleware entry — Vista uses SSE live-reload for RSC
+        entry: clientEntry,
         output: {
             path: vistaDirs.chunks,
             filename: isDev ? '[name].js' : 'main-[contenthash:8].js',
@@ -292,7 +287,7 @@ function createClientWebpackConfig(options) {
                                     react: {
                                         runtime: 'automatic',
                                         development: isDev,
-                                        refresh: isDev,
+                                        refresh: false, // No React Refresh — SSE live-reload handles updates
                                     },
                                 },
                                 target: 'es2020',
@@ -391,14 +386,8 @@ function createClientWebpackConfig(options) {
                 __VISTA_BUILD_ID__: JSON.stringify(buildId),
                 __VISTA_SERVER__: 'false',
             }),
-            ...(isDev
-                ? [
-                    new webpack_1.default.HotModuleReplacementPlugin(),
-                    new react_refresh_webpack_plugin_1.default({
-                        overlay: false, // Vista has its own error overlay
-                    }),
-                ]
-                : []),
+            // No HotModuleReplacementPlugin or ReactRefreshWebpackPlugin
+            // RSC client builds use Vista's SSE live-reload (/__vista_reload) instead
             // Extract CSS Modules into a separate file
             new MiniCssExtractPlugin({
                 filename: isDev ? 'modules.css' : 'modules-[contenthash:8].css',

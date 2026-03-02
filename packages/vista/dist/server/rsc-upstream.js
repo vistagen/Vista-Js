@@ -369,7 +369,41 @@ function startUpstream() {
                     model = react_1.default.createElement(rootLayout.component, { params: {}, searchParams: {} }, notFoundElement);
                 }
                 else {
-                    model = react_1.default.createElement('h1', null, '404 - Page Not Found');
+                    model = react_1.default.createElement('div', {
+                        style: {
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            height: '100vh',
+                            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                            background: '#0a0a0a',
+                            color: '#ededed',
+                            margin: 0,
+                            overflow: 'hidden',
+                            textAlign: 'center',
+                            userSelect: 'none',
+                        },
+                    }, react_1.default.createElement('span', {
+                        style: {
+                            fontSize: '6rem',
+                            fontWeight: 800,
+                            letterSpacing: '-0.04em',
+                            lineHeight: 1,
+                            background: 'linear-gradient(135deg, #7c3aed, #2563eb, #06b6d4)',
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent',
+                            backgroundClip: 'text',
+                        },
+                    }, '404'), react_1.default.createElement('p', {
+                        style: {
+                            marginTop: '0.75rem',
+                            fontSize: '0.95rem',
+                            fontWeight: 400,
+                            color: '#555',
+                            letterSpacing: '0.02em',
+                        },
+                    }, "There's nothing here."));
                 }
                 res.status(404);
                 res.setHeader('Content-Type', 'text/x-component');
