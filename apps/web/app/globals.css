@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -12,11 +12,12 @@
 
 /* Prevent layout shifts during hydration */
 html {
-  overflow-y: scroll; /* Always show scrollbar to prevent layout shift */
+  overflow-y: scroll;
 }
 
-/* Ensure smooth scroll behavior is handled by CSS when Lenis isn't loaded yet */
-html.lenis, html.lenis body {
+/* Lenis smooth scroll */
+html.lenis,
+html.lenis body {
   height: auto;
 }
 
@@ -36,7 +37,7 @@ html.lenis, html.lenis body {
   pointer-events: none;
 }
 
-/* Default to dark mode to prevent FOUC (flash of white) */
+/* Default dark mode */
 :root {
   --background: #0a0a0a;
   --foreground: #ededed;
@@ -44,7 +45,6 @@ html.lenis, html.lenis body {
   color-scheme: dark;
 }
 
-/* Light mode when explicitly set */
 :root.light {
   --background: #ffffff;
   --foreground: #171717;
@@ -52,7 +52,6 @@ html.lenis, html.lenis body {
   color-scheme: light;
 }
 
-/* Dark mode explicit class */
 :root.dark {
   --background: #0a0a0a;
   --foreground: #ededed;
@@ -66,7 +65,7 @@ body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
-/* Custom Utilities for Glass effects */
+/* Glass effects */
 .glass {
   background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(10px);

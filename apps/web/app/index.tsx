@@ -1,6 +1,7 @@
+
 import Features from '@/components/Features';
 import CopyCommand from '@/components/CopyCommand';
-import { Client } from 'vista';
+
 
 export default function Index() {
     return (
@@ -20,12 +21,12 @@ export default function Index() {
                 </p>
 
                 {/* CLI Command Copy - Trigger HMR */}
-                <Client><CopyCommand /></Client>
+                <CopyCommand />
 
             </div>
 
             {/* Features Section */}
-            <Client><Features /></Client>
+            <Features />
         </main>
     );
 }

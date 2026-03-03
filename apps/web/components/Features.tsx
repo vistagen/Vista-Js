@@ -27,14 +27,14 @@ export default function Features() {
                 </h2>
 
                 {/* Dashed Grid Mesh */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 border-t border-l border-dashed border-zinc-300 dark:border-zinc-800 bg-white/50 dark:bg-black/50 backdrop-blur-[2px]">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 border-t border-l border-dashed border-zinc-800 bg-black/50 backdrop-blur-[2px]">
                     {features.map((feature, i) => (
                         <div
                             key={i}
-                            className="p-8 border-r border-b border-dashed border-zinc-300 dark:border-zinc-800 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                            className="p-8 border-r border-b border-dashed border-zinc-800 hover:bg-white/5 transition-colors"
                         >
                             <h3 className="text-lg font-medium mb-3">{feature.title}</h3>
-                            <p className="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                            <p className="text-sm text-zinc-400 leading-relaxed">
                                 {feature.description}
                             </p>
                         </div>
