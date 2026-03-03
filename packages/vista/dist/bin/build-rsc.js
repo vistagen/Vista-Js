@@ -53,7 +53,7 @@ function runPostCSS(cwd, vistaDir) {
 /**
  * Generate the RSC-aware client entry file
  */
-function generateRSCClientEntry(cwd, vistaDir) {
+function generateRSCClientEntry(cwd, vistaDir, isDev) {
     const clientEntryContent = `/**
  * Vista RSC Client Entry
  *
@@ -89,7 +89,8 @@ hydrateRoot(
   })
 );
 
-// Vista live-reload: listen for server component changes via SSE
+${isDev
+        ? `// Vista live-reload: listen for server component changes via SSE
 (function connectReload() {
   const es = new EventSource('${constants_1.SSE_ENDPOINT}');
   es.onmessage = (e) => {
@@ -108,7 +109,8 @@ hydrateRoot(
     es.close();
     setTimeout(connectReload, 3000);
   };
-})();
+})();`
+        : '// SSE live-reload disabled in production'}
 `;
     fs_1.default.writeFileSync(path_1.default.join(vistaDir, 'rsc-client.tsx'), clientEntryContent);
     if (_debug)
@@ -257,7 +259,7 @@ async function buildRSC(watch = false) {
         type: route.type,
     })));
     // Generate client entry
-    generateRSCClientEntry(cwd, vistaDirs.root);
+    generateRSCClientEntry(cwd, vistaDirs.root, watch);
     // Create webpack configs
     const options = {
         cwd,
