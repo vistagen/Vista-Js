@@ -30,7 +30,7 @@ If you prefer manual configuration:
    - **Runtime:** Node
    - **Build Command:**
      ```
-     cd packages/vista && npm install --legacy-peer-deps && npm run build && cd ../../apps/web && npm install --legacy-peer-deps && npx vista build
+     cd packages/vista && npm install --legacy-peer-deps --include=dev && npm run build && cd ../../apps/web && npm install --legacy-peer-deps && npx vista build
      ```
    - **Start Command:**
      ```
