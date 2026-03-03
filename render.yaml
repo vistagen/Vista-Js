@@ -8,8 +8,8 @@ services:
     region: oregon
     plan: free
     buildCommand: |
-      cd packages/vista && npm install --legacy-peer-deps && cd ../../apps/web && npm install --legacy-peer-deps && NODE_OPTIONS="--import tsx" npx vista build
-    startCommand: cd apps/web && NODE_OPTIONS="--import tsx" npx vista start
+      cd packages/vista && npm install --legacy-peer-deps && cd ../../apps/web && npm install --legacy-peer-deps && npx tsx ../../packages/vista/bin/vista.js build
+    startCommand: cd apps/web && npx tsx ../../packages/vista/bin/vista.js start
     envVars:
       - key: NODE_ENV
         value: production
