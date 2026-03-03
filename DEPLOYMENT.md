@@ -30,11 +30,11 @@ If you prefer manual configuration:
    - **Runtime:** Node
    - **Build Command:**
      ```
-     cd packages/vista && npm install --legacy-peer-deps --include=dev && npm run build && cd ../../apps/web && npm install --legacy-peer-deps && npx vista build
+     cd packages/vista && npm install --legacy-peer-deps && cd ../../apps/web && npm install --legacy-peer-deps && npx vista build
      ```
    - **Start Command:**
      ```
-     cd apps/web && npx vista start
+     cd apps/web && NODE_OPTIONS="--import tsx" npx vista start
      ```
    - **Instance Type:** Free (or paid for production)
 
