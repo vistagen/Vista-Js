@@ -22,7 +22,8 @@
     "tailwind-merge": "^3.4.0",
     "lucide-react": "^0.562.0",
     "lenis": "^1.3.17",
-    "react-shaders": "^0.0.4"
+    "react-shaders": "^0.0.4",
+    "webpack": "^5.90.0"
   },
   "devDependencies": {
     "typescript": "^5.0.0",
