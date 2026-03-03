@@ -201,6 +201,15 @@ function setupTypeScriptRuntime(cwd: string): void {
         esModuleInterop: true,
       },
     });
+    return;
+  } catch {
+    // fallback
+  }
+
+  try {
+    require.resolve('tsx', { paths: [cwd] });
+    require('tsx/cjs');
+    return;
   } catch (e) {
     console.log('Failed to setup TypeScript runtime:', e);
     // No TypeScript compiler found

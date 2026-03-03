@@ -97,9 +97,19 @@ function setupTypeScriptRuntime(cwd) {
                 esModuleInterop: true,
             },
         });
+        return;
     }
     catch {
-        throw new Error('No TypeScript compiler available for RSC upstream runtime.');
+        // fallback
+    }
+    try {
+        require.resolve('tsx', { paths: [cwd] });
+        // tsx/cjs registers the TypeScript loader for require()
+        require('tsx/cjs');
+        return;
+    }
+    catch {
+        throw new Error('No TypeScript compiler available for RSC upstream runtime. Install one of: @swc-node/register, ts-node, or tsx');
     }
 }
 function hasClientBoundaryDirective(source) {
