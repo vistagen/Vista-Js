@@ -1,0 +1,31 @@
+# Socket.dev — Supply Chain Security for npm dependencies
+# Official: https://github.com/SocketDev/socket-cli
+# Docs:     https://docs.socket.dev/docs/getting-started
+# GitHub App: https://github.com/apps/socket-security
+#
+# Install the GitHub App on your repo to enable:
+#   1. Go to https://github.com/apps/socket-security
+#   2. Install on your Vista repository
+#   3. This config file controls scanning behavior
+
+version: 2
+
+githubApp:
+  enabled: true
+  pullRequestAlertsEnabled: true
+  dependencyOverviewEnabled: true
+  projectReportsEnabled: true
+
+triggerPaths:
+  - 'packages/*/package.json'
+  - 'package.json'
+  - 'pnpm-lock.yaml'
+  - 'pnpm-workspace.yaml'
+
+projectIgnorePaths:
+  - '.github/'
+  - 'docs/'
+  - 'scripts/'
+  - 'test-app/'
+  - 'crates/'
+  - 'apps/'

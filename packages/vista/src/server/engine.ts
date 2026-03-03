@@ -7,6 +7,14 @@ import { Transform } from 'stream';
 import webpack from 'webpack';
 import webpackDevMiddleware from 'webpack-dev-middleware';
 import webpackHotMiddleware from 'webpack-hot-middleware';
+import {
+  WRAPPED_MARKER,
+  THEME_SETTER,
+  SSE_ENDPOINT,
+  IMAGE_ENDPOINT,
+  URL_PREFIX,
+  BUILD_DIR,
+} from '../constants';
 import { RouterProvider } from '../index';
 import { loadConfig, resolveStructureValidationConfig } from '../config';
 import { ErrorOverlay, renderErrorHTML } from '../dev-error';
@@ -200,10 +208,10 @@ export function enableClientComponentWrapping(appDir: string, cwd: string): void
         const componentId = getClientComponentId(resolved);
         if (componentId && result?.default) {
           // Wrap the default export if not already wrapped
-          if (!result.default.__vistaWrapped) {
+          if (!result.default[WRAPPED_MARKER]) {
             const OriginalComponent = result.default;
             const WrappedComponent = wrapClientComponent(OriginalComponent, componentId);
-            (WrappedComponent as any).__vistaWrapped = true;
+            (WrappedComponent as any)[WRAPPED_MARKER] = true;
             result.default = WrappedComponent;
           }
         }
@@ -267,7 +275,7 @@ export function startServer(port: number = 3003, compiler?: webpack.Compiler) {
   enableClientComponentWrapping(appDir, cwd);
 
   // Load pre-rendered static pages from disk into in-memory cache
-  const vistaDirRoot = path.join(cwd, '.vista');
+  const vistaDirRoot = path.join(cwd, BUILD_DIR);
   const loadedStaticPages = loadStaticPagesFromDisk(vistaDirRoot);
   if (loadedStaticPages > 0) {
     logInfo(`Loaded ${loadedStaticPages} pre-rendered page(s) from cache`);
@@ -301,7 +309,7 @@ export function startServer(port: number = 3003, compiler?: webpack.Compiler) {
     const sseClients: Set<express.Response> = new Set();
 
     // SSE endpoint for server reload
-    app.get('/__vista_reload', (req, res) => {
+    app.get(SSE_ENDPOINT, (req, res) => {
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
@@ -447,14 +455,14 @@ export function startServer(port: number = 3003, compiler?: webpack.Compiler) {
 
   // Image optimization endpoint
   const imageHandler = createImageHandler(cwd, isDev);
-  app.get('/_vista/image', imageHandler);
+  app.get(IMAGE_ENDPOINT, imageHandler);
 
   // Serve .vista build artifacts with proper routing
   // /_vista/static/* -> .vista/static/*
-  app.use('/_vista/static', express.static(path.join(cwd, '.vista', 'static')));
+  app.use(`${URL_PREFIX}/static`, express.static(path.join(cwd, BUILD_DIR, 'static')));
 
   // Legacy: Serve .vista root for backward compatibility (client.css, etc.)
-  app.use(express.static(path.join(cwd, '.vista')));
+  app.use(express.static(path.join(cwd, BUILD_DIR)));
 
   app.use(async (req, res, next) => {
     if (req.path.startsWith('/styles.css') || req.path.startsWith('/__webpack_hmr')) {
@@ -835,7 +843,7 @@ function renderApp(
                     d.classList.add('dark');
                     d.classList.remove('light');
                     d.style.colorScheme = 'dark';
-                    window.__vistaSetTheme = function(newTheme) {
+                    window.${THEME_SETTER} = function(newTheme) {
                         d.classList.remove('light', 'dark');
                         d.classList.add(newTheme);
                         d.style.colorScheme = newTheme;

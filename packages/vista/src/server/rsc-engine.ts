@@ -32,6 +32,15 @@ import {
   clearRevalidating,
 } from './static-cache';
 import { revalidatePath } from './static-generator';
+import {
+  BUILD_DIR,
+  URL_PREFIX,
+  STATIC_CHUNKS_PATH,
+  SSE_ENDPOINT,
+  STRUCTURE_ENDPOINT,
+  IMAGE_ENDPOINT,
+  HYDRATE_DOCUMENT_FLAG,
+} from '../constants';
 
 const CjsModule = require('module');
 
@@ -123,12 +132,12 @@ function getCSSLinks(projectRoot?: string): string {
   const root = projectRoot || process.cwd();
   const links = ['<link rel="stylesheet" href="/styles.css" />'];
   // Check for extracted CSS modules (from MiniCssExtractPlugin)
-  const chunksDir = path.join(root, '.vista', 'static', 'chunks');
+  const chunksDir = path.join(root, BUILD_DIR, 'static', 'chunks');
   try {
     if (fs.existsSync(chunksDir)) {
       const files = fs.readdirSync(chunksDir).filter((f) => f.endsWith('.css'));
       for (const f of files) {
-        links.push(`<link rel="stylesheet" href="/_vista/static/chunks/${f}" />`);
+        links.push(`<link rel="stylesheet" href="${STATIC_CHUNKS_PATH}${f}" />`);
       }
     }
   } catch {
@@ -266,7 +275,7 @@ function withTimeout(url: string, options: RequestInit = {}, timeoutMs = 3000): 
 }
 
 function cleanHotUpdateFiles(cwd: string): void {
-  const chunksDir = path.join(cwd, '.vista', 'static', 'chunks');
+  const chunksDir = path.join(cwd, BUILD_DIR, 'static', 'chunks');
   if (!fs.existsSync(chunksDir)) return;
   for (const f of fs.readdirSync(chunksDir)) {
     if (f.includes('.hot-update.')) {
@@ -278,7 +287,7 @@ function cleanHotUpdateFiles(cwd: string): void {
 }
 
 function findChunkFiles(cwd: string): string[] {
-  const chunksDir = path.join(cwd, '.vista', 'static', 'chunks');
+  const chunksDir = path.join(cwd, BUILD_DIR, 'static', 'chunks');
   if (!fs.existsSync(chunksDir)) return [];
 
   const files = fs
@@ -484,7 +493,7 @@ function createHtmlDocument(
   rootMode: RootRenderMode = 'legacy'
 ): string {
   const scripts = chunkFiles
-    .map((chunk) => `<script defer src="/_vista/static/chunks/${chunk}"></script>`)
+    .map((chunk) => `<script defer src="${STATIC_CHUNKS_PATH}${chunk}"></script>`)
     .join('\n  ');
 
   if (
@@ -494,7 +503,7 @@ function createHtmlDocument(
   ) {
     const fontHtml = getFontHeadHTML();
     const headInjection = `\n  <meta charset="utf-8" />\n  <meta name="viewport" content="width=device-width, initial-scale=1" />\n  ${metadataHtml}\n  ${fontHtml}\n  ${getCSSLinks()}`;
-    const bodyInjection = `\n  <script>window.__VISTA_HYDRATE_DOCUMENT__ = true;</script>\n  ${scripts}`;
+    const bodyInjection = `\n  <script>window.${HYDRATE_DOCUMENT_FLAG} = true;</script>\n  ${scripts}`;
 
     let html = appHtml;
     if (!/^\s*<!doctype html>/i.test(html)) {
@@ -516,7 +525,7 @@ function createHtmlDocument(
   ${getCSSLinks()}
 </head>
 <body>
-  <script>window.__VISTA_HYDRATE_DOCUMENT__ = false;</script>
+  <script>window.${HYDRATE_DOCUMENT_FLAG} = false;</script>
   <div id="root">${appHtml}</div>
   ${scripts}
 </body>
@@ -668,7 +677,7 @@ async function renderFlightToHTMLStream(
 
   // 5. Build script tags for client chunks
   const scripts = chunkFiles
-    .map((chunk) => `<script defer src="/_vista/static/chunks/${chunk}"></script>`)
+    .map((chunk) => `<script defer src="${STATIC_CHUNKS_PATH}${chunk}"></script>`)
     .join('\n  ');
 
   // 6. Render to a pipeable HTML stream
@@ -702,7 +711,7 @@ async function renderFlightToHTMLStream(
             // Inject scripts before </body>
             if (html.includes('</body>')) {
               const bodyInjection = `
-  <script>window.__VISTA_HYDRATE_DOCUMENT__ = ${rootMode === 'document'};</script>
+  <script>window.${HYDRATE_DOCUMENT_FLAG} = ${rootMode === 'document'};</script>
   ${scripts}`;
               html = html.replace('</body>', `${bodyInjection}\n</body>`);
             }
@@ -745,7 +754,7 @@ function wrapInDocumentShell(
   rootMode: RootRenderMode
 ): string {
   const scripts = chunkFiles
-    .map((chunk) => `<script defer src="/_vista/static/chunks/${chunk}"></script>`)
+    .map((chunk) => `<script defer src="${STATIC_CHUNKS_PATH}${chunk}"></script>`)
     .join('\n  ');
 
   if (
@@ -755,7 +764,7 @@ function wrapInDocumentShell(
   ) {
     const fontHtml = getFontHeadHTML();
     const headInjection = `\n  <meta charset="utf-8" />\n  <meta name="viewport" content="width=device-width, initial-scale=1" />\n  ${metadataHtml}\n  ${fontHtml}\n  ${getCSSLinks()}`;
-    const bodyInjection = `\n  <script>window.__VISTA_HYDRATE_DOCUMENT__ = true;</script>\n  ${scripts}`;
+    const bodyInjection = `\n  <script>window.${HYDRATE_DOCUMENT_FLAG} = true;</script>\n  ${scripts}`;
 
     let html = bodyContent;
     if (!/^\s*<!doctype html>/i.test(html)) {
@@ -777,7 +786,7 @@ function wrapInDocumentShell(
   ${getCSSLinks()}
 </head>
 <body>
-  <script>window.__VISTA_HYDRATE_DOCUMENT__ = false;</script>
+  <script>window.${HYDRATE_DOCUMENT_FLAG} = false;</script>
   <div id="root">${bodyContent}</div>
   ${scripts}
 </body>
@@ -809,7 +818,7 @@ export function startRSCServer(options: RSCEngineOptions = {}): void {
   setupTypeScriptRuntime(cwd);
   installSSRWebpackShim();
 
-  const serverManifestPath = path.join(cwd, '.vista', 'server', 'server-manifest.json');
+  const serverManifestPath = path.join(cwd, BUILD_DIR, 'server', 'server-manifest.json');
   if (!fs.existsSync(serverManifestPath)) {
     console.error(
       `[vista:rsc] Missing server manifest at ${serverManifestPath}. Run "vista build --rsc" first.`
@@ -836,8 +845,8 @@ export function startRSCServer(options: RSCEngineOptions = {}): void {
     // Flight SSR not available — fallback to renderToString
   }
 
-  const ssrManifestPath = path.join(cwd, '.vista', 'react-server-manifest.json');
-  const ssrManifestLegacyPath = path.join(cwd, '.vista', 'react-ssr-manifest.json');
+  const ssrManifestPath = path.join(cwd, BUILD_DIR, 'react-server-manifest.json');
+  const ssrManifestLegacyPath = path.join(cwd, BUILD_DIR, 'react-ssr-manifest.json');
   const resolvedSSRManifestPath = fs.existsSync(ssrManifestPath)
     ? ssrManifestPath
     : fs.existsSync(ssrManifestLegacyPath)
@@ -898,7 +907,7 @@ export function startRSCServer(options: RSCEngineOptions = {}): void {
   // ========================================================================
   // Load pre-rendered static pages from disk into in-memory cache
   // ========================================================================
-  const vistaDirRoot = path.join(cwd, '.vista');
+  const vistaDirRoot = path.join(cwd, BUILD_DIR);
   const loadedStaticPages = loadStaticPagesFromDisk(vistaDirRoot);
   if (loadedStaticPages > 0) {
     logInfo(`Loaded ${loadedStaticPages} pre-rendered page(s) from cache`);
@@ -990,7 +999,7 @@ export function startRSCServer(options: RSCEngineOptions = {}): void {
   const sseReloadClients: Set<express.Response> = new Set();
 
   if (isDev) {
-    app.get('/__vista_reload', (req, res) => {
+    app.get(SSE_ENDPOINT, (req, res) => {
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
@@ -1025,7 +1034,7 @@ export function startRSCServer(options: RSCEngineOptions = {}): void {
   if (isDev && options.compiler) {
     app.use(
       webpackDevMiddleware(options.compiler, {
-        publicPath: '/_vista/static/chunks/',
+        publicPath: STATIC_CHUNKS_PATH,
         stats: 'none',
         writeToDisk: true,
       })
@@ -1080,7 +1089,7 @@ export function startRSCServer(options: RSCEngineOptions = {}): void {
   // ========================================================================
   const sseStructureClients: Set<express.Response> = new Set();
 
-  app.get('/__vista_structure', (req, res) => {
+  app.get(STRUCTURE_ENDPOINT, (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -1146,7 +1155,7 @@ export function startRSCServer(options: RSCEngineOptions = {}): void {
   }
 
   app.get('/styles.css', (req, res) => {
-    const cssPath = path.join(cwd, '.vista', 'client.css');
+    const cssPath = path.join(cwd, BUILD_DIR, 'client.css');
     if (fs.existsSync(cssPath)) {
       res.setHeader('Content-Type', 'text/css');
       res.sendFile(cssPath);
@@ -1157,12 +1166,12 @@ export function startRSCServer(options: RSCEngineOptions = {}): void {
 
   // Image optimization endpoint
   const imageHandler = createImageHandler(cwd, isDev);
-  app.get('/_vista/image', imageHandler);
+  app.get(IMAGE_ENDPOINT, imageHandler);
 
   app.use(express.static(path.join(cwd, 'public')));
-  app.use('/_vista/static', express.static(path.join(cwd, '.vista', 'static')));
-  app.use('/_vista', express.static(path.join(cwd, '.vista')));
-  app.use(express.static(path.join(cwd, '.vista')));
+  app.use(`${URL_PREFIX}/static`, express.static(path.join(cwd, BUILD_DIR, 'static')));
+  app.use(URL_PREFIX, express.static(path.join(cwd, BUILD_DIR)));
+  app.use(express.static(path.join(cwd, BUILD_DIR)));
 
   const proxyRSCRequest = async (req: express.Request, res: express.Response) => {
     try {

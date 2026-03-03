@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { BUILD_DIR } from '../constants';
 
 type ArtifactMode = 'legacy' | 'rsc';
 
@@ -15,15 +16,9 @@ const BASE_REQUIRED_FILES = [
   'react-server-manifest.json',
 ];
 
-const RSC_REQUIRED_FILES = [
-  ...BASE_REQUIRED_FILES,
-  path.join('server', 'server-manifest.json'),
-];
+const RSC_REQUIRED_FILES = [...BASE_REQUIRED_FILES, path.join('server', 'server-manifest.json')];
 
-const LEGACY_REQUIRED_FILES = [
-  ...BASE_REQUIRED_FILES,
-  'client.js',
-];
+const LEGACY_REQUIRED_FILES = [...BASE_REQUIRED_FILES, 'client.js'];
 
 function readJsonSafe<T>(absolutePath: string): T | null {
   try {
@@ -34,12 +29,12 @@ function readJsonSafe<T>(absolutePath: string): T | null {
 }
 
 export function validateVistaArtifacts(cwd: string, mode: ArtifactMode): string[] {
-  const vistaDir = path.join(cwd, '.vista');
+  const vistaDir = path.join(cwd, BUILD_DIR);
   const missing: string[] = [];
   const requiredFiles = mode === 'rsc' ? RSC_REQUIRED_FILES : LEGACY_REQUIRED_FILES;
 
   if (!fs.existsSync(vistaDir)) {
-    return ['.vista directory is missing'];
+    return [`${BUILD_DIR} directory is missing`];
   }
 
   for (const relativePath of requiredFiles) {
@@ -64,7 +59,6 @@ export function assertVistaArtifacts(cwd: string, mode: ArtifactMode): void {
 
   const missingList = missing.map((entry) => `- ${entry}`).join('\n');
   throw new Error(
-    `[vista:server] Missing or invalid .vista artifacts for ${mode} mode.\n${missingList}\nRun "vista build${mode === 'rsc' ? ' --rsc' : ''}" first.`
+    `[vista:server] Missing or invalid ${BUILD_DIR} artifacts for ${mode} mode.\n${missingList}\nRun "vista build${mode === 'rsc' ? ' --rsc' : ''}" first.`
   );
 }
-

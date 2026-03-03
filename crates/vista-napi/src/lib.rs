@@ -1,6 +1,59 @@
 use napi_derive::napi;
 use vista_transforms::{detect_client_directive_fast, has_client_directive};
+use vista_transforms::naming;
 use std::path::Path;
+
+// ============================================================================
+// Framework Identity & Integrity (baked into compiled .node binary)
+// ============================================================================
+
+/// Framework identity returned from the compiled binary.
+/// JS uses this to verify that constants.ts matches the binary.
+#[napi(object)]
+pub struct FrameworkIdentity {
+    /// Framework name (e.g. "vista")
+    pub name: String,
+    /// Integrity token: hash of all naming constants
+    pub integrity_token: String,
+    /// All naming constants for cross-verification
+    pub url_prefix: String,
+    pub static_chunks_path: String,
+    pub mount_id_prefix: String,
+    pub rsc_data_global: String,
+    pub client_refs_global: String,
+    pub build_id_global: String,
+    pub build_dir: String,
+    pub sse_endpoint: String,
+    pub image_endpoint: String,
+}
+
+/// Get the framework identity from the compiled Rust binary.
+/// This function returns values that are BAKED INTO the binary at compile time.
+/// If someone renames constants.ts but doesn't recompile Rust → tokens won't match.
+#[napi]
+pub fn get_framework_identity() -> FrameworkIdentity {
+    FrameworkIdentity {
+        name: naming::FRAMEWORK_NAME.to_string(),
+        integrity_token: format!("{:x}", naming::compute_integrity_token()),
+        url_prefix: naming::URL_PREFIX.to_string(),
+        static_chunks_path: naming::STATIC_CHUNKS_PATH.to_string(),
+        mount_id_prefix: naming::MOUNT_ID_PREFIX.to_string(),
+        rsc_data_global: naming::RSC_DATA_GLOBAL.to_string(),
+        client_refs_global: naming::CLIENT_REFS_GLOBAL.to_string(),
+        build_id_global: naming::BUILD_ID_GLOBAL.to_string(),
+        build_dir: naming::BUILD_DIR.to_string(),
+        sse_endpoint: naming::SSE_ENDPOINT.to_string(),
+        image_endpoint: naming::IMAGE_ENDPOINT.to_string(),
+    }
+}
+
+/// Verify that a JS-computed integrity token matches the Rust-compiled one.
+/// Returns true if they match (framework is authentic), false if tampered.
+#[napi]
+pub fn verify_integrity(js_token: String) -> bool {
+    let rust_token = format!("{:x}", naming::compute_integrity_token());
+    rust_token == js_token
+}
 
 /// Check if source code contains 'use client' directive
 #[napi]

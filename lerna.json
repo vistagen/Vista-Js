@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/lerna.json",
+  "_source": "https://github.com/lerna/lerna | Docs: https://lerna.js.org/ | Install: pnpm add -Dw lerna",
+  "npmClient": "pnpm",
+  "packages": ["packages/*"],
+  "command": {
+    "version": {
+      "exact": true,
+      "message": "chore: release v%s"
+    },
+    "publish": {
+      "npmClient": "npm",
+      "allowBranch": ["main"],
+      "registry": "https://registry.npmjs.org/"
+    }
+  },
+  "version": "0.1.0"
+}

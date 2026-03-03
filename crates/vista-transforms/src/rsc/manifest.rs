@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use serde::{Serialize, Deserialize};
 use super::scanner::scan_app_directory;
+use crate::naming;
 
 /// Entry in the client components manifest
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -213,7 +214,7 @@ pub fn generate_client_manifest(
         path_to_id.insert(component.absolute_path.clone(), module_id.clone());
         ssr_module_mapping.insert(
             component.absolute_path,
-            format!("/_vista/static/chunks/{}.js", chunk_name),
+            format!("{}{}.js", naming::STATIC_CHUNKS_PATH, chunk_name),
         );
         client_modules.insert(module_id, entry);
     }

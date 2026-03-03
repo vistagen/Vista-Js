@@ -1,0 +1,8 @@
+id: no-console-log-in-production
+valid:
+  - "logger.info('hello')"
+  - "console.error('problem')"
+  - "console.warn('caution')"
+invalid:
+  - "console.log('debug info')"
+  - 'console.log(data)'

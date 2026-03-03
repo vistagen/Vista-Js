@@ -7,6 +7,7 @@
  */
 
 import os from 'os';
+import { LOG_IGNORE_PREFIXES } from '../constants';
 
 // ─── ANSI Colors ───────────────────────────────────────────────────────────
 
@@ -221,8 +222,7 @@ function getVistaVersion(): string {
 
 const INTERNAL_PREFIXES = [
   '/__webpack',
-  '/__vista',
-  '/_vista/static/',
+  ...LOG_IGNORE_PREFIXES,
   '/favicon.ico',
   '/_next',
   '/hot-update',

@@ -1,7 +1,7 @@
 # Vista JS — Complete Developer Guide
 
 > **Version**: 0.1.0  
-> **Last Updated**: March 2, 2026  
+> **Last Updated**: March 3, 2026  
 > **Package**: `@vistagenic/vista`  
 > **Repo**: `https://github.com/vistagen/Vista-Js`  
 > **License**: MIT
@@ -34,17 +34,19 @@ touching any code.
 17. [SSE Live-Reload](#17-sse-live-reload)
 18. [Rust Crates](#18-rust-crates)
 19. [NAPI Bindings](#19-napi-bindings)
-20. [Create-Vista-App Scaffolding CLI](#20-create-vista-app-scaffolding-cli)
-21. [Test Suite](#21-test-suite)
-22. [All Commands Reference](#22-all-commands-reference)
-23. [Key Files Quick Reference](#23-key-files-quick-reference)
-24. [Architecture Diagrams](#24-architecture-diagrams)
-25. [Common Development Workflows](#25-common-development-workflows)
-26. [Bug Bounty & Debugging Guide](#26-bug-bounty--debugging-guide)
-27. [Rust Setup & Native Build](#27-rust-setup--native-build)
-28. [Known Issues & Gotchas](#28-known-issues--gotchas)
-29. [Deployment](#29-deployment)
-30. [Contributing Checklist](#30-contributing-checklist)
+20. [Constants & Naming System](#20-constants--naming-system)
+21. [Rename Prevention & Integrity Guard](#21-rename-prevention--integrity-guard)
+22. [Create-Vista-App Scaffolding CLI](#22-create-vista-app-scaffolding-cli)
+23. [Test Suite](#23-test-suite)
+24. [All Commands Reference](#24-all-commands-reference)
+25. [Key Files Quick Reference](#25-key-files-quick-reference)
+26. [Architecture Diagrams](#26-architecture-diagrams)
+27. [Common Development Workflows](#27-common-development-workflows)
+28. [Bug Bounty & Debugging Guide](#28-bug-bounty--debugging-guide)
+29. [Rust Setup & Native Build](#29-rust-setup--native-build)
+30. [Known Issues & Gotchas](#30-known-issues--gotchas)
+31. [Deployment](#31-deployment)
+32. [Contributing Checklist](#32-contributing-checklist)
 
 ---
 
@@ -188,8 +190,9 @@ vista-source/                          # ← Root of the monorepo
 │   ├── vista-transforms/              # Pure Rust SWC transforms
 │   │   ├── Cargo.toml
 │   │   └── src/
-│   │       ├── lib.rs                 # Re-exports client_directive + rsc
+│   │       ├── lib.rs                 # Re-exports client_directive + rsc + naming
 │   │       ├── client_directive.rs    # 'use client' detection
+│   │       ├── naming.rs             # ★ Framework naming constants + integrity token
 │   │       └── rsc/
 │   │           ├── mod.rs             # RSC module entry
 │   │           ├── scanner.rs         # App directory scanner
@@ -213,6 +216,8 @@ vista-source/                          # ← Root of the monorepo
 ├── scripts/                           # CI/CD + test scripts
 │   ├── test-regression.cjs            # Phase 1 regression tests (32 tests)
 │   ├── test-vista-hardening.cjs       # Hardening integration tests
+│   ├── test-integrity.cjs             # ★ Rename prevention integrity guard (48 checks)
+│   ├── test-constants.cjs             # Shared naming constants for test scripts
 │   └── check-create-vista-command.cjs # Guard: validate CLI command usage
 │
 ├── test-app/                          # ★ LOCAL TEST APPLICATION
@@ -261,18 +266,19 @@ packages:
 
 ### Root Scripts
 
-| Script                            | Command                                       | Purpose                                      |
-| --------------------------------- | --------------------------------------------- | -------------------------------------------- |
-| `pnpm build`                      | `turbo run build`                             | Build all packages                           |
-| `pnpm dev`                        | `turbo run dev`                               | Dev mode for all packages                    |
-| `pnpm lint`                       | `eslint .`                                    | Lint entire monorepo                         |
-| `pnpm lint:fix`                   | `eslint . --fix`                              | Auto-fix lint errors                         |
-| `pnpm format`                     | `prettier --write .`                          | Format all files                             |
-| `pnpm format:check`               | `prettier --check .`                          | Check formatting                             |
-| `pnpm test`                       | Full test pipeline                            | Turbo tests + guard + hardening + regression |
-| `pnpm test:hardening`             | `node scripts/test-vista-hardening.cjs`       | Hardening suite                              |
-| `pnpm test:regression`            | `node scripts/test-regression.cjs`            | Regression suite (32 tests)                  |
-| `pnpm guard:create-vista-command` | `node scripts/check-create-vista-command.cjs` | Validate CLI usage in docs                   |
+| Script                            | Command                                       | Purpose                                            |
+| --------------------------------- | --------------------------------------------- | -------------------------------------------------- |
+| `pnpm build`                      | `turbo run build`                             | Build all packages                                 |
+| `pnpm dev`                        | `turbo run dev`                               | Dev mode for all packages                          |
+| `pnpm lint`                       | `eslint .`                                    | Lint entire monorepo                               |
+| `pnpm lint:fix`                   | `eslint . --fix`                              | Auto-fix lint errors                               |
+| `pnpm format`                     | `prettier --write .`                          | Format all files                                   |
+| `pnpm format:check`               | `prettier --check .`                          | Check formatting                                   |
+| `pnpm test`                       | Full test pipeline                            | Turbo + guard + integrity + hardening + regression |
+| `pnpm test:integrity`             | `node scripts/test-integrity.cjs`             | Rename prevention guard (48 checks)                |
+| `pnpm test:hardening`             | `node scripts/test-vista-hardening.cjs`       | Hardening suite                                    |
+| `pnpm test:regression`            | `node scripts/test-regression.cjs`            | Regression suite (32 tests)                        |
+| `pnpm guard:create-vista-command` | `node scripts/check-create-vista-command.cjs` | Validate CLI usage in docs                         |
 
 ---
 
@@ -967,8 +973,9 @@ No Node.js dependency. Pure Rust library that can be used anywhere.
 
 ```
 src/
-├── lib.rs                    # Re-exports
+├── lib.rs                    # Re-exports (client_directive + rsc + naming)
 ├── client_directive.rs       # 'use client' detection
+├── naming.rs                 # ★ Framework naming constants + integrity token
 └── rsc/
     ├── mod.rs                # RSC module entry
     ├── scanner.rs            # App directory scanner
@@ -1062,7 +1069,139 @@ bindings provide **10–100× faster** file scanning.
 
 ---
 
-## 20. Create-Vista-App Scaffolding CLI
+## 20. Constants & Naming System
+
+Vista centralizes **all framework-specific naming** into constants files. This makes the framework
+easier to maintain and is the foundation of the rename prevention system.
+
+### Source of Truth
+
+| Layer      | File                                    | Purpose                                |
+| ---------- | --------------------------------------- | -------------------------------------- |
+| TypeScript | `packages/vista/src/constants.ts`       | All TS/JS code imports from here       |
+| Rust       | `crates/vista-transforms/src/naming.rs` | All Rust code uses these constants     |
+| Tests      | `scripts/test-constants.cjs`            | Test scripts share constants from here |
+
+### Constants Defined
+
+| Constant                | Value                           | Usage                                      |
+| ----------------------- | ------------------------------- | ------------------------------------------ |
+| `FRAMEWORK_NAME`        | `'vista'`                       | Logs, error messages, branding             |
+| `BUILD_DIR`             | `'.vista'`                      | Build output directory (≈ `.next/`)        |
+| `URL_PREFIX`            | `'/_vista'`                     | Base URL for internal assets (≈ `/_next/`) |
+| `STATIC_CHUNKS_PATH`    | `'/_vista/static/chunks/'`      | Webpack output public path                 |
+| `IMAGE_ENDPOINT`        | `'/_vista/image'`               | Image optimization endpoint                |
+| `SSE_ENDPOINT`          | `'/__vista_reload'`             | SSE live-reload endpoint                   |
+| `STRUCTURE_ENDPOINT`    | `'/__vista_structure'`          | Structure validation SSE                   |
+| `HYDRATE_DOCUMENT_FLAG` | `'__VISTA_HYDRATE_DOCUMENT__'`  | Window global for hydration mode           |
+| `CLIENT_REFS_FLAG`      | `'__VISTA_CLIENT_REFERENCES__'` | Window global for client component refs    |
+| `RSC_DATA_FLAG`         | `'__VISTA_RSC_DATA__'`          | Window global for RSC payload              |
+| `BUILD_ID_DEFINE`       | `'__VISTA_BUILD_ID__'`          | Webpack DefinePlugin injection             |
+| `MOUNT_ID_PREFIX`       | `'__vista_cc_'`                 | Client component DOM mount IDs             |
+
+### Rules
+
+1. **Never hardcode** `'.vista'`, `'/_vista/'`, `'__vista_'`, etc. in source files
+2. **Always import** from `constants.ts` (TS) or use `naming::*` (Rust)
+3. **Rust and TS constants must stay in sync** — verified by `test-integrity.cjs`
+4. **Config files** (`.gitignore`, `turbo.json`, `eslint.config.mjs`) have comments linking to `BUILD_DIR`
+
+### Renaming the Framework
+
+If you need to rename the framework (e.g., from `vista` to something else):
+
+1. Update `constants.ts` — all 12+ constants
+2. Update `naming.rs` — mirror the same values
+3. Recompile Rust: `cargo build --release`
+4. Update `test-constants.cjs`
+5. Update config files (`.gitignore`, `turbo.json`, `eslint.config.mjs`)
+6. Update NAPI `index.js` — 40+ platform-specific `.node` filenames
+7. Run `pnpm test:integrity` to verify sync
+
+---
+
+## 21. Rename Prevention & Integrity Guard
+
+Vista includes a **4-layer rename prevention system** inspired by Next.js that makes it
+difficult to fork the codebase and rebrand it via simple find-replace.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Layer 1: Rust Binary Identity                          │
+│  naming.rs → compiled into .node binary                 │
+│  getFrameworkIdentity() + verifyIntegrity()              │
+├─────────────────────────────────────────────────────────┤
+│  Layer 2: Runtime Cross-Check                           │
+│  integrity.ts → startup verifies TS ↔ Rust match        │
+│  verifyFrameworkIntegrity(nativeModule)                  │
+├─────────────────────────────────────────────────────────┤
+│  Layer 3: Build Watermark                               │
+│  manifest.ts → __integrity token in every build         │
+│  generateBuildWatermark()                               │
+├─────────────────────────────────────────────────────────┤
+│  Layer 4: CI Guard (48 automated checks)                │
+│  test-integrity.cjs → runs on pnpm test                 │
+│  TS sync, Rust sync, NAPI, no hardcoding, configs       │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Layer 1: Rust Binary Identity
+
+**Files**: `crates/vista-transforms/src/naming.rs`, `crates/vista-napi/src/lib.rs`
+
+- `compute_integrity_token()` — hashes all naming constants at compile time
+- `get_framework_identity()` — NAPI function returns name + token + all constants
+- `verify_integrity(js_token)` — checks if JS-provided token matches Rust binary
+
+Since these values are **baked into the compiled `.node` binary**, renaming JS constants
+without recompiling Rust causes a token mismatch → crash.
+
+### Layer 2: Runtime Cross-Check
+
+**File**: `packages/vista/src/integrity.ts`
+
+- `verifyFrameworkIntegrity(nativeModule)` — called at startup
+- Compares each TS constant with its Rust counterpart
+- Throws fatal error with specific mismatch details if tampered
+
+### Layer 3: Build Watermark
+
+**File**: `packages/vista/src/build/manifest.ts`
+
+- Every `artifact-manifest.json` includes `__integrity: "vista:<hash>"`
+- Build artifacts are traceable to the original framework
+
+### Layer 4: CI Guard
+
+**File**: `scripts/test-integrity.cjs` | **Command**: `pnpm test:integrity`
+
+48 automated checks across 7 sections:
+
+| Section                   | Checks                                                                      |
+| ------------------------- | --------------------------------------------------------------------------- |
+| Layer 1: TS Constants     | `FRAMEWORK_NAME`, `BUILD_DIR`, `URL_PREFIX`, `SSE_ENDPOINT` exist           |
+| Layer 2: Rust Sync        | `naming.rs` constants match TS values, `compute_integrity_token()` exists   |
+| Layer 3: NAPI Bridge      | `getFrameworkIdentity`, `verifyIntegrity` exported, `vista-native.*` naming |
+| Layer 4: No Hardcoding    | 8+ source files scanned for inline `/_vista`, `__vista_reload`, `.vista`    |
+| Layer 5: Config Sync      | `.gitignore`, `turbo.json`, `eslint.config.mjs`, `package.json bin`         |
+| Layer 6: Integrity Module | `integrity.ts` has all required functions                                   |
+| Layer 7: Build Watermark  | `manifest.ts` imports watermark + embeds `__integrity`                      |
+
+### What Happens If Someone Tries to Rename
+
+| Attack                  | Result                                                        |
+| ----------------------- | ------------------------------------------------------------- |
+| Find-replace in JS only | Rust binary still returns `"vista"` → integrity check crashes |
+| Also rename `naming.rs` | `.node` binary wasn't recompiled → same hash → crash          |
+| Recompile Rust too      | Must rename 40+ `vista-native.*` entries in NAPI `index.js`   |
+| Do ALL of above         | CI guard `test-integrity.cjs` catches inconsistencies         |
+| Remove integrity check  | Build watermark in artifacts still says `"vista"`             |
+
+---
+
+## 22. Create-Vista-App Scaffolding CLI
 
 **File**: `packages/create-vista-app/bin/cli.js` (210 lines)
 
@@ -1108,7 +1247,7 @@ template/
 
 ---
 
-## 21. Test Suite
+## 23. Test Suite
 
 ### Test Scripts Overview
 
@@ -1182,7 +1321,7 @@ node scripts\check-create-vista-command.cjs
 
 ---
 
-## 22. All Commands Reference
+## 24. All Commands Reference
 
 ### Development Commands
 
@@ -1300,7 +1439,7 @@ git log --oneline -10
 
 ---
 
-## 23. Key Files Quick Reference
+## 25. Key Files Quick Reference
 
 ### Files You'll Touch Most Often
 
@@ -1336,7 +1475,7 @@ git log --oneline -10
 
 ---
 
-## 24. Architecture Diagrams
+## 26. Architecture Diagrams
 
 ### RSC Request Flow
 
@@ -1407,7 +1546,7 @@ bin/vista.js
 
 ---
 
-## 25. Common Development Workflows
+## 27. Common Development Workflows
 
 ### Workflow 1: Change Server Behavior
 
@@ -1500,7 +1639,7 @@ Set-Location packages\vista; npx tsc; Set-Location ..\...; pnpm test
 
 ---
 
-## 26. Bug Bounty & Debugging Guide
+## 28. Bug Bounty & Debugging Guide
 
 ### Where Bugs Typically Live
 
@@ -1603,7 +1742,7 @@ Invoke-WebRequest -Uri "http://localhost:3003/__vista_reload"
 
 ---
 
-## 27. Rust Setup & Native Build
+## 29. Rust Setup & Native Build
 
 ### First-Time Rust Setup
 
@@ -1694,7 +1833,7 @@ cargo build --release --target aarch64-apple-darwin
 
 ---
 
-## 28. Known Issues & Gotchas
+## 30. Known Issues & Gotchas
 
 ### 1. Browser Extensions Cause Hydration Warnings
 
@@ -1786,7 +1925,7 @@ const normalized = filePath.replace(/\\/g, '/');
 
 ---
 
-## 29. Deployment
+## 31. Deployment
 
 ### Production Build
 
@@ -1846,7 +1985,7 @@ services:
 
 ---
 
-## 30. Contributing Checklist
+## 32. Contributing Checklist
 
 Before submitting a PR:
 

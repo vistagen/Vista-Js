@@ -4,7 +4,8 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".vista/**", "*.node"]
+      "outputs": ["dist/**", ".vista/**", "*.node"],
+      "_note": ".vista = BUILD_DIR from packages/vista/src/constants.ts"
     },
     "dev": {
       "cache": false,

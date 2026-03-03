@@ -15,6 +15,7 @@ import {
   type StructureValidationResult,
   type ValidateAppStructureInput,
 } from './structure-validator';
+import { BUILD_DIR } from '../constants';
 
 // ============================================================================
 // Types
@@ -73,7 +74,7 @@ export class StructureWatcher extends EventEmitter {
 
       this.watcher = chokidar.watch(watchPaths, {
         ignoreInitial: true,
-        ignored: ['**/node_modules/**', '**/.vista/**', '**/dist/**'],
+        ignored: ['**/node_modules/**', `**/${BUILD_DIR}/**`, '**/dist/**'],
         persistent: true,
       });
 

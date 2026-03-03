@@ -6,6 +6,7 @@
  */
 
 import React from 'react';
+import { SSE_ENDPOINT } from './constants';
 
 // ============================================================================
 // Types
@@ -323,7 +324,7 @@ export function renderErrorHTML(errors: VistaError[]): string {
     // Vista live-reload: auto-refresh error overlay when files change
     (function() {
       function connect() {
-        var es = new EventSource('/__vista_reload');
+        var es = new EventSource('${SSE_ENDPOINT}');
         es.onmessage = function(e) {
           if (e.data && e.data !== 'connected') window.location.reload();
         };
@@ -395,9 +396,8 @@ export function ErrorOverlay({ errors }: ErrorOverlayProps): React.ReactElement 
     </div>
     <div class="vista-error-content">
       <div class="vista-error-message">${escapeHtml(error.message)}</div>
-      ${
-        error.file
-          ? `
+      ${error.file
+            ? `
       <div class="vista-error-location" onclick="vistaOpenInEditor('${escapeJsString(error.file)}', ${error.line || 1}, ${error.column || 1})">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: #888; flex-shrink: 0">
           <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"></path>
@@ -406,16 +406,15 @@ export function ErrorOverlay({ errors }: ErrorOverlayProps): React.ReactElement 
         <span class="vista-error-location-file">${escapeHtml(error.file)}</span>
         ${error.line ? `<span class="vista-error-location-line">:${error.line}${error.column ? ':' + error.column : ''}</span>` : ''}
       </div>`
-          : ''
-      }
+            : ''
+          }
       ${error.codeFrame ? `<div class="vista-error-code-frame">${escapeHtml(error.codeFrame)}</div>` : ''}
-      ${
-        stackLines.length > 0
-          ? `
+      ${stackLines.length > 0
+            ? `
       <div class="vista-error-stack-title">Stack Trace</div>
       <div class="vista-error-stack">${escapeHtml(stackLines.join('\n'))}</div>`
-          : ''
-      }
+            : ''
+          }
     </div>
     <div class="vista-error-footer">
       <span class="vista-error-footer-text">Vista JS Development Mode</span>

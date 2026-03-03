@@ -6,6 +6,7 @@ import { pathToFileURL } from 'url';
 
 import type { RouteEntry, ServerManifest } from '../build/rsc/server-manifest';
 import { resolveNotFoundComponent, resolveRootLayout } from './root-resolver';
+import { BUILD_DIR } from '../constants';
 
 // NOTE: RouteErrorBoundary and RouteSuspense are 'use client' components.
 // Under --conditions react-server, React.Component is not available, so we
@@ -387,8 +388,8 @@ function startUpstream(): void {
   const flightServer = require(flightServerPath) as FlightServerApi;
   installClientLoadHook(cwd, flightServer.createClientModuleProxy);
 
-  const serverManifestPath = path.join(cwd, '.vista', 'server', 'server-manifest.json');
-  const flightManifestPath = path.join(cwd, '.vista', 'react-client-manifest.json');
+  const serverManifestPath = path.join(cwd, BUILD_DIR, 'server', 'server-manifest.json');
+  const flightManifestPath = path.join(cwd, BUILD_DIR, 'react-client-manifest.json');
 
   if (!fs.existsSync(serverManifestPath)) {
     throw new Error('Missing RSC server manifest. Run "vista build" first.');

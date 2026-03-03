@@ -6,22 +6,22 @@ import reactHooksPlugin from 'eslint-plugin-react-hooks';
 export default tseslint.config(
   // Base JavaScript rules
   js.configs.recommended,
-  
+
   // TypeScript rules
   ...tseslint.configs.recommended,
-  
+
   // Global ignores
   {
     ignores: [
       '**/node_modules/**',
       '**/dist/**',
-      '**/.vista/**',
+      '**/.vista/**', // BUILD_DIR from packages/vista/src/constants.ts
       '**/target/**',
       '**/*.d.ts',
       '**/test-app/**',
     ],
   },
-  
+
   // React rules for TSX files
   {
     files: ['**/*.tsx', '**/*.jsx'],
@@ -48,7 +48,7 @@ export default tseslint.config(
       },
     },
   },
-  
+
   // TypeScript specific rules
   {
     files: ['**/*.ts', '**/*.tsx'],
@@ -60,14 +60,14 @@ export default tseslint.config(
       '@typescript-eslint/no-require-imports': 'off',
     },
   },
-  
+
   // General rules
   {
     rules: {
       'no-console': ['warn', { allow: ['warn', 'error'] }],
       'prefer-const': 'error',
       'no-var': 'error',
-      'eqeqeq': ['error', 'always'],
+      eqeqeq: ['error', 'always'],
     },
   }
 );

@@ -10,6 +10,7 @@
 
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
+use crate::naming;
 
 /// Reference to a client component that needs hydration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -81,7 +82,7 @@ pub fn reset_mount_counter() {
 /// Generate unique mount ID for a client component
 pub fn generate_mount_id() -> String {
     let id = MOUNT_ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-    format!("__vista_cc_{}", id)
+    format!("{}{}", naming::MOUNT_ID_PREFIX, id)
 }
 
 /// Serialize a JavaScript value to SerializedValue
@@ -162,12 +163,12 @@ pub fn generate_hydration_script(payload: &RSCPayload) -> String {
     
     format!(r#"
 <script>
-    window.__VISTA_RSC_DATA__ = {data_json};
-    window.__VISTA_CLIENT_REFERENCES__ = {refs_json};
-    window.__VISTA_BUILD_ID__ = "{build_id}";
+    window.{rsc_data} = {data_json};
+    window.{client_refs} = {refs_json};
+    window.{build_id_global} = "{build_id}";
 </script>
 <script type="module">
-    const refs = window.__VISTA_CLIENT_REFERENCES__;
+    const refs = window.{client_refs};
     
     async function hydrateAll() {{
         for (const ref of refs) {{
@@ -220,6 +221,9 @@ pub fn generate_hydration_script(payload: &RSCPayload) -> String {
         data_json = data_json,
         refs_json = refs_json,
         build_id = payload.build_id,
+        rsc_data = naming::RSC_DATA_GLOBAL,
+        client_refs = naming::CLIENT_REFS_GLOBAL,
+        build_id_global = naming::BUILD_ID_GLOBAL,
     )
 }
 
@@ -243,9 +247,9 @@ mod tests {
     fn test_generate_mount_id() {
         let _guard = TEST_MUTEX.lock().unwrap();
         reset_mount_counter();
-        assert_eq!(generate_mount_id(), "__vista_cc_0");
-        assert_eq!(generate_mount_id(), "__vista_cc_1");
-        assert_eq!(generate_mount_id(), "__vista_cc_2");
+        assert_eq!(generate_mount_id(), format!("{}0", naming::MOUNT_ID_PREFIX));
+        assert_eq!(generate_mount_id(), format!("{}1", naming::MOUNT_ID_PREFIX));
+        assert_eq!(generate_mount_id(), format!("{}2", naming::MOUNT_ID_PREFIX));
     }
     
     #[test]
@@ -282,7 +286,7 @@ mod tests {
         );
         
         assert_eq!(ref_.id, "client:components/Button");
-        assert_eq!(ref_.mount_id, "__vista_cc_0");
+        assert_eq!(ref_.mount_id, format!("{}0", naming::MOUNT_ID_PREFIX));
         assert_eq!(ref_.export_name, "default");
     }
 }

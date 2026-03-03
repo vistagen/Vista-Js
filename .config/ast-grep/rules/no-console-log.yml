@@ -1,0 +1,14 @@
+# ast-grep Rule — https://ast-grep.github.io/guide/rule-config.html
+id: no-console-log-in-production
+message: 'Use logger.ts instead of console.log() in production code'
+severity: warning
+language: TypeScript
+rule:
+  pattern: console.log($$$)
+files:
+  - 'packages/vista/src/**/*.ts'
+ignoreFiles:
+  - '**/*.test.*'
+  - '**/dev-error.*'
+  - '**/debug-*.js'
+  - '**/logger.ts'

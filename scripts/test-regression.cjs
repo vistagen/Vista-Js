@@ -15,6 +15,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
+const { TEMP_PREFIX_REGRESSION, BIN_COMMAND } = require('./test-constants.cjs');
+
 const repoRoot = path.resolve(__dirname, '..');
 const vistaDistRoot = path.join(repoRoot, 'packages', 'vista', 'dist');
 const vistaSrcRoot = path.join(repoRoot, 'packages', 'vista', 'src');
@@ -71,7 +73,7 @@ async function testAsync(label, fn) {
 // ---------------------------------------------------------------------------
 
 function createFixtureApp() {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vista-regression-'));
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), TEMP_PREFIX_REGRESSION));
   const appDir = path.join(tempRoot, 'app');
 
   // root.tsx — with static metadata + notFoundRoute
@@ -581,7 +583,7 @@ function suiteTypeExports() {
     const pkg = JSON.parse(
       fs.readFileSync(path.join(repoRoot, 'packages', 'vista', 'package.json'), 'utf8')
     );
-    assert(pkg.bin && pkg.bin.vista, 'Missing bin.vista in package.json');
+    assert(pkg.bin && pkg.bin[BIN_COMMAND], `Missing bin.${BIN_COMMAND} in package.json`);
   });
 }
 

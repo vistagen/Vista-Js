@@ -3,6 +3,8 @@
 const fs = require('fs');
 const path = require('path');
 
+const { CREATE_APP_PACKAGE } = require('./test-constants.cjs');
+
 const repoRoot = process.cwd();
 
 const scanTargets = [
@@ -10,7 +12,7 @@ const scanTargets = [
   'apps/web/components',
   'apps/web/data',
   'apps/components',
-  'packages/create-vista-app/bin/cli.js',
+  `packages/${CREATE_APP_PACKAGE}/bin/cli.js`,
 ];
 
 const allowedExtensions = new Set(['.md', '.tsx', '.ts', '.js', '.cjs', '.mjs']);
@@ -18,13 +20,13 @@ const allowedExtensions = new Set(['.md', '.tsx', '.ts', '.js', '.cjs', '.mjs'])
 const checks = [
   {
     id: 'missing-latest',
-    message: 'npx create-vista-app must include @latest',
-    regex: /\bnpx\s+create-vista-app(?!@latest\b)/,
+    message: `npx ${CREATE_APP_PACKAGE} must include @latest`,
+    regex: new RegExp(`\\bnpx\\s+${CREATE_APP_PACKAGE}(?!@latest\\b)`),
   },
   {
     id: 'legacy-install',
-    message: 'use npx create-vista-app@latest instead of npm install create-vista-app',
-    regex: /\bnpm\s+install\s+create-vista-app(?!@latest\b)/,
+    message: `use npx ${CREATE_APP_PACKAGE}@latest instead of npm install ${CREATE_APP_PACKAGE}`,
+    regex: new RegExp(`\\bnpm\\s+install\\s+${CREATE_APP_PACKAGE}(?!@latest\\b)`),
   },
 ];
 

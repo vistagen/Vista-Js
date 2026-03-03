@@ -9,6 +9,7 @@ import {
   writeCanonicalVistaArtifacts,
 } from '../build/manifest';
 import { loadConfig, resolveStructureValidationConfig } from '../config';
+import { CLIENT_COMPONENTS_FLAG, SSE_ENDPOINT } from '../constants';
 import {
   validateAppStructure,
   type StructureValidationResult,
@@ -266,7 +267,7 @@ function hideCompileError() {
     if (div) div.remove();
 }
 
-const sse = new EventSource('/__vista_reload');
+const sse = new EventSource('${SSE_ENDPOINT}');
 sse.onmessage = (event) => {
     if (event.data === 'reload') {
         hideCompileError();
@@ -295,7 +296,7 @@ sse.onerror = (e) => {
 }
 
 // Export for debugging
-(window as any).__VISTA_CLIENT_COMPONENTS__ = CLIENT_COMPONENTS;
+(window as any).${CLIENT_COMPONENTS_FLAG} = CLIENT_COMPONENTS;
     `;
 
   fs.writeFileSync(path.join(vistaDir, 'client.tsx'), clientEntryContent);

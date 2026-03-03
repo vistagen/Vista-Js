@@ -4,6 +4,7 @@ import ReactRefreshWebpackPlugin from '@pmmmwh/react-refresh-webpack-plugin';
 import MiniCssExtractPlugin from 'mini-css-extract-plugin';
 import { VistaServerComponentPlugin } from './server-component-plugin';
 import { VistaFlightPlugin } from '../build/webpack/plugins/vista-flight-plugin';
+import { BUILD_DIR } from '../constants';
 
 export interface WebpackConfigOptions {
   cwd: string;
@@ -12,7 +13,7 @@ export interface WebpackConfigOptions {
 
 export function createWebpackConfig(options: WebpackConfigOptions): webpack.Configuration {
   const { cwd, isDev } = options;
-  const vistaDir = path.join(cwd, '.vista');
+  const vistaDir = path.join(cwd, BUILD_DIR);
   const entryPoint = path.join(vistaDir, 'client.tsx');
 
   // Find React - check local node_modules first, then traverse up for monorepo hoisting

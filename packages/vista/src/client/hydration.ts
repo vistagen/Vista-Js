@@ -12,6 +12,7 @@
 
 import * as React from 'react';
 import { hydrateRoot, createRoot } from 'react-dom/client';
+import { CLIENT_REFS_FLAG } from '../constants';
 
 export interface ClientReference {
   id: string;
@@ -170,7 +171,7 @@ export async function hydrateClientComponents(options: HydrationOptions = {}): P
   const { progressive = false, priority = 'normal', useIdleCallback = false } = options;
 
   // Get references from window
-  const references: ClientReference[] = (window as any).__VISTA_CLIENT_REFERENCES__ || [];
+  const references: ClientReference[] = (window as any)[CLIENT_REFS_FLAG] || [];
 
   if (references.length === 0) {
     console.log('[Vista] No client components to hydrate');

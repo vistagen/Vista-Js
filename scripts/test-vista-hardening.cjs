@@ -18,8 +18,10 @@ function writeFile(targetPath, content) {
   fs.writeFileSync(targetPath, content, 'utf8');
 }
 
+const { TEMP_PREFIX_HARDENING } = require('./test-constants.cjs');
+
 function makeTempAppFixture() {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vista-hardening-'));
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), TEMP_PREFIX_HARDENING));
   const appDir = path.join(tempRoot, 'app');
 
   writeFile(

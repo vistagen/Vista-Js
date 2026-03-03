@@ -1,3 +1,4 @@
+import { IMAGE_ENDPOINT } from '../constants';
 import { ImageConfig } from './image-config';
 
 export type ImageLoaderProps = {
@@ -26,5 +27,5 @@ export const defaultLoader: ImageLoader = ({ src, width, quality }) => {
   }
 
   const q = quality || 75;
-  return `/_vista/image?url=${encodeURIComponent(src)}&w=${width}&q=${q}`;
+  return `${IMAGE_ENDPOINT}?url=${encodeURIComponent(src)}&w=${width}&q=${q}`;
 };

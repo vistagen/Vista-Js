@@ -28,6 +28,7 @@
 
 import type { LocalFontOptions, FontResult, FontSource, FontRegistryEntry } from './types';
 import { registerFont } from './registry';
+import { LOCAL_FONT_PREFIX } from '../constants';
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -102,7 +103,7 @@ export function createLocalFont(options: LocalFontOptions): FontResult {
 
   // Generate a unique family name
   _counter++;
-  const familyName = `__vista_local_${hashName(sources.map((s) => s.path).join('|') + _counter)}`;
+  const familyName = `${LOCAL_FONT_PREFIX}${hashName(sources.map((s) => s.path).join('|') + _counter)}`;
   const className = `__font_${hashName(familyName)}`;
   const variableName = variable || `--font-local-${hashName(familyName)}`;
   const fontFamilyValue = `'${familyName}', ${fallback.join(', ')}`;

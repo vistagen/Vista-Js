@@ -1,0 +1,13 @@
+# ast-grep — AST-based code search, lint, and rewriting
+# Official: https://github.com/ast-grep/ast-grep
+# Docs:     https://ast-grep.github.io/
+# Install:  pnpm add -Dw @ast-grep/cli
+# Run:      pnpm lint:ast-grep  (or: npx ast-grep scan)
+#
+# Write custom rules in .config/ast-grep/rules/*.yml
+# Test rules with:  npx ast-grep test
+
+ruleDirs:
+  - .config/ast-grep/rules
+testConfigs:
+  - testDir: .config/ast-grep/rule-tests
