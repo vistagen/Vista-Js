@@ -7,6 +7,7 @@ exports.validateVistaArtifacts = validateVistaArtifacts;
 exports.assertVistaArtifacts = assertVistaArtifacts;
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
+const constants_1 = require("../constants");
 const BASE_REQUIRED_FILES = [
     'BUILD_ID',
     'artifact-manifest.json',
@@ -18,14 +19,8 @@ const BASE_REQUIRED_FILES = [
     'react-client-manifest.json',
     'react-server-manifest.json',
 ];
-const RSC_REQUIRED_FILES = [
-    ...BASE_REQUIRED_FILES,
-    path_1.default.join('server', 'server-manifest.json'),
-];
-const LEGACY_REQUIRED_FILES = [
-    ...BASE_REQUIRED_FILES,
-    'client.js',
-];
+const RSC_REQUIRED_FILES = [...BASE_REQUIRED_FILES, path_1.default.join('server', 'server-manifest.json')];
+const LEGACY_REQUIRED_FILES = [...BASE_REQUIRED_FILES, 'client.js'];
 function readJsonSafe(absolutePath) {
     try {
         return JSON.parse(fs_1.default.readFileSync(absolutePath, 'utf-8'));
@@ -35,11 +30,11 @@ function readJsonSafe(absolutePath) {
     }
 }
 function validateVistaArtifacts(cwd, mode) {
-    const vistaDir = path_1.default.join(cwd, '.vista');
+    const vistaDir = path_1.default.join(cwd, constants_1.BUILD_DIR);
     const missing = [];
     const requiredFiles = mode === 'rsc' ? RSC_REQUIRED_FILES : LEGACY_REQUIRED_FILES;
     if (!fs_1.default.existsSync(vistaDir)) {
-        return ['.vista directory is missing'];
+        return [`${constants_1.BUILD_DIR} directory is missing`];
     }
     for (const relativePath of requiredFiles) {
         const absolutePath = path_1.default.join(vistaDir, relativePath);
@@ -59,5 +54,5 @@ function assertVistaArtifacts(cwd, mode) {
     if (missing.length === 0)
         return;
     const missingList = missing.map((entry) => `- ${entry}`).join('\n');
-    throw new Error(`[vista:server] Missing or invalid .vista artifacts for ${mode} mode.\n${missingList}\nRun "vista build${mode === 'rsc' ? ' --rsc' : ''}" first.`);
+    throw new Error(`[vista:server] Missing or invalid ${constants_1.BUILD_DIR} artifacts for ${mode} mode.\n${missingList}\nRun "vista build${mode === 'rsc' ? ' --rsc' : ''}" first.`);
 }

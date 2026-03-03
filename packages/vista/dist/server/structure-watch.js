@@ -17,6 +17,7 @@ exports.createStructureWatcher = createStructureWatcher;
 const path_1 = __importDefault(require("path"));
 const events_1 = require("events");
 const structure_validator_1 = require("./structure-validator");
+const constants_1 = require("../constants");
 // ============================================================================
 // Watch Service
 // ============================================================================
@@ -52,7 +53,7 @@ class StructureWatcher extends events_1.EventEmitter {
             ];
             this.watcher = chokidar.watch(watchPaths, {
                 ignoreInitial: true,
-                ignored: ['**/node_modules/**', '**/.vista/**', '**/dist/**'],
+                ignored: ['**/node_modules/**', `**/${constants_1.BUILD_DIR}/**`, '**/dist/**'],
                 persistent: true,
             });
             this.watcher.on('all', (event, filePath) => {

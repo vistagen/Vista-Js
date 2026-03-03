@@ -26,6 +26,8 @@ exports.cleanOldCache = cleanOldCache;
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const crypto_1 = __importDefault(require("crypto"));
+const constants_1 = require("../constants");
+const integrity_1 = require("../integrity");
 // ============================================================================
 // BUILD_ID Generation
 // ============================================================================
@@ -56,7 +58,7 @@ function getBuildId(vistaDir, forceNew = false) {
  * In RSC mode, creates the full structure for server/client bundles.
  */
 function createVistaDirectories(cwd, mode = 'legacy') {
-    const root = path_1.default.join(cwd, '.vista');
+    const root = path_1.default.join(cwd, constants_1.BUILD_DIR);
     const dirs = {
         root,
         cache: path_1.default.join(root, 'cache'),
@@ -93,7 +95,7 @@ function generateBuildManifest(vistaDir, buildId, pages = {}) {
         polyfillFiles: [],
         devFiles: [],
         lowPriorityFiles: [],
-        rootMainFiles: ['/_vista/static/chunks/webpack.js', '/_vista/static/chunks/main.js'],
+        rootMainFiles: [`${constants_1.STATIC_CHUNKS_PATH}webpack.js`, `${constants_1.STATIC_CHUNKS_PATH}main.js`],
         pages,
     };
     const manifestPath = path_1.default.join(vistaDir, 'build-manifest.json');
@@ -144,10 +146,10 @@ function generateRequiredServerFilesManifest(cwd, vistaDir) {
         appDir: cwd,
         relativeAppDir: '.',
         files: [
-            '.vista/BUILD_ID',
-            '.vista/build-manifest.json',
-            '.vista/routes-manifest.json',
-            '.vista/app-path-routes-manifest.json',
+            `${constants_1.BUILD_DIR}/BUILD_ID`,
+            `${constants_1.BUILD_DIR}/build-manifest.json`,
+            `${constants_1.BUILD_DIR}/routes-manifest.json`,
+            `${constants_1.BUILD_DIR}/app-path-routes-manifest.json`,
         ],
     };
     fs_1.default.writeFileSync(path_1.default.join(vistaDir, 'required-server-files.json'), JSON.stringify(manifest, null, 2));
@@ -163,6 +165,7 @@ function writeArtifactManifest(vistaDir, buildId) {
         schemaVersion: 1,
         buildId,
         generatedAt: new Date().toISOString(),
+        __integrity: (0, integrity_1.generateBuildWatermark)(),
         manifests: {
             buildManifest: 'build-manifest.json',
             routesManifest: 'routes-manifest.json',

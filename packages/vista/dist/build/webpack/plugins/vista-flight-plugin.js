@@ -13,6 +13,7 @@ exports.VistaFlightPlugin = void 0;
 const webpack_1 = __importDefault(require("webpack"));
 const path_1 = __importDefault(require("path"));
 const component_identity_1 = require("../../rsc/component-identity");
+const constants_1 = require("../../../constants");
 const PLUGIN_NAME = 'VistaFlightPlugin';
 class VistaFlightPlugin {
     appDir;
@@ -88,7 +89,7 @@ class VistaFlightPlugin {
         const jsSource = `// Vista Client Reference Manifest
 (function() {
   if (typeof window !== 'undefined') {
-    window.__VISTA_CLIENT_MANIFEST__ = ${JSON.stringify(manifest, null, 2)};
+    window.${constants_1.CLIENT_MANIFEST_FLAG} = ${JSON.stringify(manifest, null, 2)};
   }
 })();`;
         compilation.emitAsset('vista-client-manifest.js', new webpack_1.default.sources.RawSource(jsSource));

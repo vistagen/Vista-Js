@@ -30,6 +30,7 @@ const logger_1 = require("./logger");
 const not_found_page_1 = require("./not-found-page");
 const static_cache_1 = require("./static-cache");
 const static_generator_1 = require("./static-generator");
+const constants_1 = require("../constants");
 const CjsModule = require('module');
 // ---------------------------------------------------------------------------
 // SSR Webpack Shim
@@ -85,12 +86,12 @@ function getCSSLinks(projectRoot) {
     const root = projectRoot || process.cwd();
     const links = ['<link rel="stylesheet" href="/styles.css" />'];
     // Check for extracted CSS modules (from MiniCssExtractPlugin)
-    const chunksDir = path_1.default.join(root, '.vista', 'static', 'chunks');
+    const chunksDir = path_1.default.join(root, constants_1.BUILD_DIR, 'static', 'chunks');
     try {
         if (fs_1.default.existsSync(chunksDir)) {
             const files = fs_1.default.readdirSync(chunksDir).filter((f) => f.endsWith('.css'));
             for (const f of files) {
-                links.push(`<link rel="stylesheet" href="/_vista/static/chunks/${f}" />`);
+                links.push(`<link rel="stylesheet" href="${constants_1.STATIC_CHUNKS_PATH}${f}" />`);
             }
         }
     }
@@ -218,7 +219,7 @@ function withTimeout(url, options = {}, timeoutMs = 3000) {
     });
 }
 function cleanHotUpdateFiles(cwd) {
-    const chunksDir = path_1.default.join(cwd, '.vista', 'static', 'chunks');
+    const chunksDir = path_1.default.join(cwd, constants_1.BUILD_DIR, 'static', 'chunks');
     if (!fs_1.default.existsSync(chunksDir))
         return;
     for (const f of fs_1.default.readdirSync(chunksDir)) {
@@ -231,7 +232,7 @@ function cleanHotUpdateFiles(cwd) {
     }
 }
 function findChunkFiles(cwd) {
-    const chunksDir = path_1.default.join(cwd, '.vista', 'static', 'chunks');
+    const chunksDir = path_1.default.join(cwd, constants_1.BUILD_DIR, 'static', 'chunks');
     if (!fs_1.default.existsSync(chunksDir))
         return [];
     const files = fs_1.default
@@ -404,14 +405,14 @@ function injectBeforeClosingTag(html, tagName, injection) {
 }
 function createHtmlDocument(appHtml, metadataHtml, chunkFiles, rootMode = 'legacy') {
     const scripts = chunkFiles
-        .map((chunk) => `<script defer src="/_vista/static/chunks/${chunk}"></script>`)
+        .map((chunk) => `<script defer src="${constants_1.STATIC_CHUNKS_PATH}${chunk}"></script>`)
         .join('\n  ');
     if (rootMode === 'document' ||
         /^\s*<!doctype html>\s*<html/i.test(appHtml) ||
         /^\s*<html/i.test(appHtml)) {
         const fontHtml = (0, registry_1.getAllFontHTML)();
         const headInjection = `\n  <meta charset="utf-8" />\n  <meta name="viewport" content="width=device-width, initial-scale=1" />\n  ${metadataHtml}\n  ${fontHtml}\n  ${getCSSLinks()}`;
-        const bodyInjection = `\n  <script>window.__VISTA_HYDRATE_DOCUMENT__ = true;</script>\n  ${scripts}`;
+        const bodyInjection = `\n  <script>window.${constants_1.HYDRATE_DOCUMENT_FLAG} = true;</script>\n  ${scripts}`;
         let html = appHtml;
         if (!/^\s*<!doctype html>/i.test(html)) {
             html = `<!DOCTYPE html>\n${html}`;
@@ -431,7 +432,7 @@ function createHtmlDocument(appHtml, metadataHtml, chunkFiles, rootMode = 'legac
   ${getCSSLinks()}
 </head>
 <body>
-  <script>window.__VISTA_HYDRATE_DOCUMENT__ = false;</script>
+  <script>window.${constants_1.HYDRATE_DOCUMENT_FLAG} = false;</script>
   <div id="root">${appHtml}</div>
   ${scripts}
 </body>
@@ -545,7 +546,7 @@ async function renderFlightToHTMLStream(upstreamOrigin, pathname, search, metada
     const element = react_1.default.createElement(FlightRoot);
     // 5. Build script tags for client chunks
     const scripts = chunkFiles
-        .map((chunk) => `<script defer src="/_vista/static/chunks/${chunk}"></script>`)
+        .map((chunk) => `<script defer src="${constants_1.STATIC_CHUNKS_PATH}${chunk}"></script>`)
         .join('\n  ');
     // 6. Render to a pipeable HTML stream
     return new Promise((resolve, reject) => {
@@ -574,7 +575,7 @@ async function renderFlightToHTMLStream(upstreamOrigin, pathname, search, metada
                         // Inject scripts before </body>
                         if (html.includes('</body>')) {
                             const bodyInjection = `
-  <script>window.__VISTA_HYDRATE_DOCUMENT__ = ${rootMode === 'document'};</script>
+  <script>window.${constants_1.HYDRATE_DOCUMENT_FLAG} = ${rootMode === 'document'};</script>
   ${scripts}`;
                             html = html.replace('</body>', `${bodyInjection}\n</body>`);
                         }
@@ -606,14 +607,14 @@ async function renderFlightToHTMLStream(upstreamOrigin, pathname, search, metada
  */
 function wrapInDocumentShell(bodyContent, metadataHtml, chunkFiles, rootMode) {
     const scripts = chunkFiles
-        .map((chunk) => `<script defer src="/_vista/static/chunks/${chunk}"></script>`)
+        .map((chunk) => `<script defer src="${constants_1.STATIC_CHUNKS_PATH}${chunk}"></script>`)
         .join('\n  ');
     if (rootMode === 'document' ||
         /^\s*<!doctype html>\s*<html/i.test(bodyContent) ||
         /^\s*<html/i.test(bodyContent)) {
         const fontHtml = (0, registry_1.getAllFontHTML)();
         const headInjection = `\n  <meta charset="utf-8" />\n  <meta name="viewport" content="width=device-width, initial-scale=1" />\n  ${metadataHtml}\n  ${fontHtml}\n  ${getCSSLinks()}`;
-        const bodyInjection = `\n  <script>window.__VISTA_HYDRATE_DOCUMENT__ = true;</script>\n  ${scripts}`;
+        const bodyInjection = `\n  <script>window.${constants_1.HYDRATE_DOCUMENT_FLAG} = true;</script>\n  ${scripts}`;
         let html = bodyContent;
         if (!/^\s*<!doctype html>/i.test(html)) {
             html = `<!DOCTYPE html>\n${html}`;
@@ -633,7 +634,7 @@ function wrapInDocumentShell(bodyContent, metadataHtml, chunkFiles, rootMode) {
   ${getCSSLinks()}
 </head>
 <body>
-  <script>window.__VISTA_HYDRATE_DOCUMENT__ = false;</script>
+  <script>window.${constants_1.HYDRATE_DOCUMENT_FLAG} = false;</script>
   <div id="root">${bodyContent}</div>
   ${scripts}
 </body>
@@ -654,7 +655,7 @@ function startRSCServer(options = {}) {
     installSingleReactResolution(cwd);
     setupTypeScriptRuntime(cwd);
     installSSRWebpackShim();
-    const serverManifestPath = path_1.default.join(cwd, '.vista', 'server', 'server-manifest.json');
+    const serverManifestPath = path_1.default.join(cwd, constants_1.BUILD_DIR, 'server', 'server-manifest.json');
     if (!fs_1.default.existsSync(serverManifestPath)) {
         console.error(`[vista:rsc] Missing server manifest at ${serverManifestPath}. Run "vista build --rsc" first.`);
         process.exit(1);
@@ -678,8 +679,8 @@ function startRSCServer(options = {}) {
     catch (err) {
         // Flight SSR not available — fallback to renderToString
     }
-    const ssrManifestPath = path_1.default.join(cwd, '.vista', 'react-server-manifest.json');
-    const ssrManifestLegacyPath = path_1.default.join(cwd, '.vista', 'react-ssr-manifest.json');
+    const ssrManifestPath = path_1.default.join(cwd, constants_1.BUILD_DIR, 'react-server-manifest.json');
+    const ssrManifestLegacyPath = path_1.default.join(cwd, constants_1.BUILD_DIR, 'react-ssr-manifest.json');
     const resolvedSSRManifestPath = fs_1.default.existsSync(ssrManifestPath)
         ? ssrManifestPath
         : fs_1.default.existsSync(ssrManifestLegacyPath)
@@ -731,7 +732,7 @@ function startRSCServer(options = {}) {
     // ========================================================================
     // Load pre-rendered static pages from disk into in-memory cache
     // ========================================================================
-    const vistaDirRoot = path_1.default.join(cwd, '.vista');
+    const vistaDirRoot = path_1.default.join(cwd, constants_1.BUILD_DIR);
     const loadedStaticPages = (0, static_cache_1.loadStaticPagesFromDisk)(vistaDirRoot);
     if (loadedStaticPages > 0) {
         (0, logger_1.logInfo)(`Loaded ${loadedStaticPages} pre-rendered page(s) from cache`);
@@ -817,7 +818,7 @@ function startRSCServer(options = {}) {
     // ========================================================================
     const sseReloadClients = new Set();
     if (isDev) {
-        app.get('/__vista_reload', (req, res) => {
+        app.get(constants_1.SSE_ENDPOINT, (req, res) => {
             res.setHeader('Content-Type', 'text/event-stream');
             res.setHeader('Cache-Control', 'no-cache');
             res.setHeader('Connection', 'keep-alive');
@@ -849,7 +850,7 @@ function startRSCServer(options = {}) {
     }
     if (isDev && options.compiler) {
         app.use((0, webpack_dev_middleware_1.default)(options.compiler, {
-            publicPath: '/_vista/static/chunks/',
+            publicPath: constants_1.STATIC_CHUNKS_PATH,
             stats: 'none',
             writeToDisk: true,
         }));
@@ -896,7 +897,7 @@ function startRSCServer(options = {}) {
     // Structure Watcher SSE (RSC dev mode)
     // ========================================================================
     const sseStructureClients = new Set();
-    app.get('/__vista_structure', (req, res) => {
+    app.get(constants_1.STRUCTURE_ENDPOINT, (req, res) => {
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
@@ -949,7 +950,7 @@ function startRSCServer(options = {}) {
         });
     }
     app.get('/styles.css', (req, res) => {
-        const cssPath = path_1.default.join(cwd, '.vista', 'client.css');
+        const cssPath = path_1.default.join(cwd, constants_1.BUILD_DIR, 'client.css');
         if (fs_1.default.existsSync(cssPath)) {
             res.setHeader('Content-Type', 'text/css');
             res.sendFile(cssPath);
@@ -959,11 +960,11 @@ function startRSCServer(options = {}) {
     });
     // Image optimization endpoint
     const imageHandler = (0, image_optimizer_1.createImageHandler)(cwd, isDev);
-    app.get('/_vista/image', imageHandler);
+    app.get(constants_1.IMAGE_ENDPOINT, imageHandler);
     app.use(express_1.default.static(path_1.default.join(cwd, 'public')));
-    app.use('/_vista/static', express_1.default.static(path_1.default.join(cwd, '.vista', 'static')));
-    app.use('/_vista', express_1.default.static(path_1.default.join(cwd, '.vista')));
-    app.use(express_1.default.static(path_1.default.join(cwd, '.vista')));
+    app.use(`${constants_1.URL_PREFIX}/static`, express_1.default.static(path_1.default.join(cwd, constants_1.BUILD_DIR, 'static')));
+    app.use(constants_1.URL_PREFIX, express_1.default.static(path_1.default.join(cwd, constants_1.BUILD_DIR)));
+    app.use(express_1.default.static(path_1.default.join(cwd, constants_1.BUILD_DIR)));
     const proxyRSCRequest = async (req, res) => {
         try {
             const fetchOptions = {

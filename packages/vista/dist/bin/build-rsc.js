@@ -22,6 +22,7 @@ const client_manifest_1 = require("../build/rsc/client-manifest");
 const server_manifest_1 = require("../build/rsc/server-manifest");
 const file_scanner_1 = require("./file-scanner");
 const config_1 = require("../config");
+const constants_1 = require("../constants");
 const structure_validator_1 = require("../server/structure-validator");
 const static_generator_1 = require("../server/static-generator");
 const structure_log_1 = require("../server/structure-log");
@@ -67,7 +68,7 @@ import { createFromFetch } from 'react-server-dom-webpack/client';
 import { RSCRouter } from 'vista/client/rsc-router';
 import { callServer } from 'vista/client/server-actions';
 
-const hydrateDocument = (window as any).__VISTA_HYDRATE_DOCUMENT__ === true;
+const hydrateDocument = (window as any).${constants_1.HYDRATE_DOCUMENT_FLAG} === true;
 const rootElement = hydrateDocument ? document : document.getElementById('root');
 if (!rootElement) {
   throw new Error('Missing #root element for hydration.');
@@ -90,7 +91,7 @@ hydrateRoot(
 
 // Vista live-reload: listen for server component changes via SSE
 (function connectReload() {
-  const es = new EventSource('/__vista_reload');
+  const es = new EventSource('${constants_1.SSE_ENDPOINT}');
   es.onmessage = (e) => {
     if (e.data === 'reload') {
       window.location.reload();

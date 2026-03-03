@@ -19,6 +19,7 @@ const fs_1 = __importDefault(require("fs"));
 const manifest_1 = require("../manifest");
 const client_manifest_1 = require("./client-manifest");
 const server_manifest_1 = require("./server-manifest");
+const constants_1 = require("../../constants");
 // Find module path (handles monorepo hoisting)
 const findModulePath = (moduleName, cwd) => {
     const localPath = path_1.default.resolve(cwd, 'node_modules', moduleName);
@@ -174,8 +175,8 @@ function createServerWebpackConfig(options) {
         plugins: [
             new webpack_1.default.DefinePlugin({
                 'process.env.NODE_ENV': JSON.stringify(isDev ? 'development' : 'production'),
-                __VISTA_BUILD_ID__: JSON.stringify(buildId),
-                __VISTA_SERVER__: 'true',
+                [constants_1.BUILD_ID_DEFINE]: JSON.stringify(buildId),
+                [constants_1.SERVER_DEFINE]: 'true',
             }),
         ],
         devtool: isDev ? 'source-map' : false,
@@ -217,7 +218,7 @@ function createClientWebpackConfig(options) {
             path: vistaDirs.chunks,
             filename: isDev ? '[name].js' : 'main-[contenthash:8].js',
             chunkFilename: isDev ? '[name].js' : '[name]-[contenthash:8].js',
-            publicPath: '/_vista/static/chunks/',
+            publicPath: constants_1.STATIC_CHUNKS_PATH,
             clean: !isDev,
         },
         // Disable filesystem cache for client RSC build in dev mode.
@@ -383,11 +384,11 @@ function createClientWebpackConfig(options) {
             },
             new webpack_1.default.DefinePlugin({
                 'process.env.NODE_ENV': JSON.stringify(isDev ? 'development' : 'production'),
-                __VISTA_BUILD_ID__: JSON.stringify(buildId),
-                __VISTA_SERVER__: 'false',
+                [constants_1.BUILD_ID_DEFINE]: JSON.stringify(buildId),
+                [constants_1.SERVER_DEFINE]: 'false',
             }),
             // No HotModuleReplacementPlugin or ReactRefreshWebpackPlugin
-            // RSC client builds use Vista's SSE live-reload (/__vista_reload) instead
+            // RSC client builds use Vista's SSE live-reload (${SSE_ENDPOINT}) instead
             // Extract CSS Modules into a separate file
             new MiniCssExtractPlugin({
                 filename: isDev ? 'modules.css' : 'modules-[contenthash:8].css',

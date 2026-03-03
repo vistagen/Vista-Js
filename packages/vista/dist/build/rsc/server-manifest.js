@@ -20,6 +20,7 @@ exports.isServerComponentPath = isServerComponentPath;
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const component_identity_1 = require("./component-identity");
+const constants_1 = require("../../constants");
 const RESERVED_INTERNAL_SEGMENTS = new Set(['[not-found]']);
 function hasReservedInternalSegment(relativePath) {
     return relativePath
@@ -323,7 +324,7 @@ function generateServerManifest(cwd, appDir) {
     }
     const routes = buildRoutes(components, appDir);
     // Get or generate build ID
-    const buildIdPath = path_1.default.join(cwd, '.vista', 'BUILD_ID');
+    const buildIdPath = path_1.default.join(cwd, constants_1.BUILD_DIR, 'BUILD_ID');
     let buildId = 'dev';
     try {
         if (fs_1.default.existsSync(buildIdPath)) {

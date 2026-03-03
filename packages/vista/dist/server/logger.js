@@ -21,6 +21,7 @@ exports.logEvent = logEvent;
 exports.requestLogger = requestLogger;
 exports.markStartTime = markStartTime;
 const os_1 = __importDefault(require("os"));
+const constants_1 = require("../constants");
 // ─── ANSI Colors ───────────────────────────────────────────────────────────
 const bold = (s) => `\x1b[1m${s}\x1b[22m`;
 const dim = (s) => `\x1b[2m${s}\x1b[22m`;
@@ -199,8 +200,7 @@ function getVistaVersion() {
 }
 const INTERNAL_PREFIXES = [
     '/__webpack',
-    '/__vista',
-    '/_vista/static/',
+    ...constants_1.LOG_IGNORE_PREFIXES,
     '/favicon.ico',
     '/_next',
     '/hot-update',

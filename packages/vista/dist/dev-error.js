@@ -15,6 +15,7 @@ const jsx_runtime_1 = require("react/jsx-runtime");
  * Uses inline styles and vanilla JS for interactivity.
  */
 const react_1 = __importDefault(require("react"));
+const constants_1 = require("./constants");
 // ============================================================================
 // Inline CSS (no external dependencies)
 // ============================================================================
@@ -297,7 +298,7 @@ function renderErrorHTML(errors) {
     // Vista live-reload: auto-refresh error overlay when files change
     (function() {
       function connect() {
-        var es = new EventSource('/__vista_reload');
+        var es = new EventSource('${constants_1.SSE_ENDPOINT}');
         es.onmessage = function(e) {
           if (e.data && e.data !== 'connected') window.location.reload();
         };

@@ -29,6 +29,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createLocalFont = createLocalFont;
 const registry_1 = require("./registry");
+const constants_1 = require("../constants");
 // ─── Helpers ───────────────────────────────────────────────────────────────
 let _counter = 0;
 function hashName(name) {
@@ -85,7 +86,7 @@ function createLocalFont(options) {
     const sources = typeof src === 'string' ? [{ path: src, weight: String(weight), style }] : src;
     // Generate a unique family name
     _counter++;
-    const familyName = `__vista_local_${hashName(sources.map((s) => s.path).join('|') + _counter)}`;
+    const familyName = `${constants_1.LOCAL_FONT_PREFIX}${hashName(sources.map((s) => s.path).join('|') + _counter)}`;
     const className = `__font_${hashName(familyName)}`;
     const variableName = variable || `--font-local-${hashName(familyName)}`;
     const fontFamilyValue = `'${familyName}', ${fallback.join(', ')}`;

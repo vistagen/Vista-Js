@@ -48,6 +48,7 @@ exports.hydrateClientComponents = hydrateClientComponents;
 exports.initializeHydration = initializeHydration;
 const React = __importStar(require("react"));
 const client_1 = require("react-dom/client");
+const constants_1 = require("../constants");
 // Track hydrated components
 const hydratedComponents = new Set();
 const loadedChunks = new Map();
@@ -175,7 +176,7 @@ async function hydrateComponent(reference) {
 async function hydrateClientComponents(options = {}) {
     const { progressive = false, priority = 'normal', useIdleCallback = false } = options;
     // Get references from window
-    const references = window.__VISTA_CLIENT_REFERENCES__ || [];
+    const references = window[constants_1.CLIENT_REFS_FLAG] || [];
     if (references.length === 0) {
         console.log('[Vista] No client components to hydrate');
         return;

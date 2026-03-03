@@ -9,6 +9,7 @@ const path_1 = __importDefault(require("path"));
 const react_1 = __importDefault(require("react"));
 const url_1 = require("url");
 const root_resolver_1 = require("./root-resolver");
+const constants_1 = require("../constants");
 // NOTE: RouteErrorBoundary and RouteSuspense are 'use client' components.
 // Under --conditions react-server, React.Component is not available, so we
 // must NOT import them at the top level.  Instead we lazy-require them after
@@ -323,8 +324,8 @@ function startUpstream() {
     const flightServerPath = resolveFromWorkspace('react-server-dom-webpack/server.node', cwd);
     const flightServer = require(flightServerPath);
     installClientLoadHook(cwd, flightServer.createClientModuleProxy);
-    const serverManifestPath = path_1.default.join(cwd, '.vista', 'server', 'server-manifest.json');
-    const flightManifestPath = path_1.default.join(cwd, '.vista', 'react-client-manifest.json');
+    const serverManifestPath = path_1.default.join(cwd, constants_1.BUILD_DIR, 'server', 'server-manifest.json');
+    const flightManifestPath = path_1.default.join(cwd, constants_1.BUILD_DIR, 'react-client-manifest.json');
     if (!fs_1.default.existsSync(serverManifestPath)) {
         throw new Error('Missing RSC server manifest. Run "vista build" first.');
     }

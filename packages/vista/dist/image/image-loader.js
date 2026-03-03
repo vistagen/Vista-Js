@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.defaultLoader = void 0;
+const constants_1 = require("../constants");
 /**
  * Default Vista image loader.
  *
@@ -18,6 +19,6 @@ const defaultLoader = ({ src, width, quality }) => {
         return src;
     }
     const q = quality || 75;
-    return `/_vista/image?url=${encodeURIComponent(src)}&w=${width}&q=${q}`;
+    return `${constants_1.IMAGE_ENDPOINT}?url=${encodeURIComponent(src)}&w=${width}&q=${q}`;
 };
 exports.defaultLoader = defaultLoader;

@@ -12,6 +12,7 @@ const webpack_config_1 = require("./webpack.config");
 const file_scanner_1 = require("./file-scanner");
 const manifest_1 = require("../build/manifest");
 const config_1 = require("../config");
+const constants_1 = require("../constants");
 const structure_validator_1 = require("../server/structure-validator");
 const structure_log_1 = require("../server/structure-log");
 const _debug = !!process.env.VISTA_DEBUG;
@@ -237,7 +238,7 @@ function hideCompileError() {
     if (div) div.remove();
 }
 
-const sse = new EventSource('/__vista_reload');
+const sse = new EventSource('${constants_1.SSE_ENDPOINT}');
 sse.onmessage = (event) => {
     if (event.data === 'reload') {
         hideCompileError();
@@ -265,7 +266,7 @@ sse.onerror = (e) => {
         : '// SSE reload disabled in production'}
 
 // Export for debugging
-(window as any).__VISTA_CLIENT_COMPONENTS__ = CLIENT_COMPONENTS;
+(window as any).${constants_1.CLIENT_COMPONENTS_FLAG} = CLIENT_COMPONENTS;
     `;
     fs_1.default.writeFileSync(path_1.default.join(vistaDir, 'client.tsx'), clientEntryContent);
     if (_debug) {

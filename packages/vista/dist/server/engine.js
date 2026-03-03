@@ -14,6 +14,7 @@ const react_1 = __importDefault(require("react"));
 const stream_1 = require("stream");
 const webpack_dev_middleware_1 = __importDefault(require("webpack-dev-middleware"));
 const webpack_hot_middleware_1 = __importDefault(require("webpack-hot-middleware"));
+const constants_1 = require("../constants");
 const config_1 = require("../config");
 const dev_error_1 = require("../dev-error");
 const artifact_validator_1 = require("./artifact-validator");
@@ -164,10 +165,10 @@ function enableClientComponentWrapping(appDir, cwd) {
                 const componentId = getClientComponentId(resolved);
                 if (componentId && result?.default) {
                     // Wrap the default export if not already wrapped
-                    if (!result.default.__vistaWrapped) {
+                    if (!result.default[constants_1.WRAPPED_MARKER]) {
                         const OriginalComponent = result.default;
                         const WrappedComponent = (0, client_boundary_1.wrapClientComponent)(OriginalComponent, componentId);
-                        WrappedComponent.__vistaWrapped = true;
+                        WrappedComponent[constants_1.WRAPPED_MARKER] = true;
                         result.default = WrappedComponent;
                     }
                 }
@@ -222,7 +223,7 @@ function startServer(port = 3003, compiler) {
     // Enable RSC: Auto-wrap client components with hydration markers
     enableClientComponentWrapping(appDir, cwd);
     // Load pre-rendered static pages from disk into in-memory cache
-    const vistaDirRoot = path_1.default.join(cwd, '.vista');
+    const vistaDirRoot = path_1.default.join(cwd, constants_1.BUILD_DIR);
     const loadedStaticPages = (0, static_cache_1.loadStaticPagesFromDisk)(vistaDirRoot);
     if (loadedStaticPages > 0) {
         (0, logger_1.logInfo)(`Loaded ${loadedStaticPages} pre-rendered page(s) from cache`);
@@ -248,7 +249,7 @@ function startServer(port = 3003, compiler) {
         // Watches server component files and triggers page reload
         const sseClients = new Set();
         // SSE endpoint for server reload
-        app.get('/__vista_reload', (req, res) => {
+        app.get(constants_1.SSE_ENDPOINT, (req, res) => {
             res.setHeader('Content-Type', 'text/event-stream');
             res.setHeader('Cache-Control', 'no-cache');
             res.setHeader('Connection', 'keep-alive');
@@ -375,12 +376,12 @@ function startServer(port = 3003, compiler) {
     app.use(express_1.default.static(path_1.default.join(cwd, 'public')));
     // Image optimization endpoint
     const imageHandler = (0, image_optimizer_1.createImageHandler)(cwd, isDev);
-    app.get('/_vista/image', imageHandler);
+    app.get(constants_1.IMAGE_ENDPOINT, imageHandler);
     // Serve .vista build artifacts with proper routing
     // /_vista/static/* -> .vista/static/*
-    app.use('/_vista/static', express_1.default.static(path_1.default.join(cwd, '.vista', 'static')));
+    app.use(`${constants_1.URL_PREFIX}/static`, express_1.default.static(path_1.default.join(cwd, constants_1.BUILD_DIR, 'static')));
     // Legacy: Serve .vista root for backward compatibility (client.css, etc.)
-    app.use(express_1.default.static(path_1.default.join(cwd, '.vista')));
+    app.use(express_1.default.static(path_1.default.join(cwd, constants_1.BUILD_DIR)));
     app.use(async (req, res, next) => {
         if (req.path.startsWith('/styles.css') || req.path.startsWith('/__webpack_hmr')) {
             return next();
@@ -672,7 +673,7 @@ layouts) {
                     d.classList.add('dark');
                     d.classList.remove('light');
                     d.style.colorScheme = 'dark';
-                    window.__vistaSetTheme = function(newTheme) {
+                    window.${constants_1.THEME_SETTER} = function(newTheme) {
                         d.classList.remove('light', 'dark');
                         d.classList.add(newTheme);
                         d.style.colorScheme = newTheme;

@@ -38,6 +38,8 @@ export interface ArtifactManifest {
     schemaVersion: number;
     buildId: string;
     generatedAt: string;
+    /** Integrity watermark — framework identity + hash token */
+    __integrity?: string;
     manifests: {
         buildManifest: string;
         routesManifest: string;

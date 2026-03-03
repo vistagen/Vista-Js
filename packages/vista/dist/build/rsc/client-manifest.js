@@ -19,6 +19,7 @@ exports.isClientComponentPath = isClientComponentPath;
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const component_identity_1 = require("./component-identity");
+const constants_1 = require("../../constants");
 // Try to load Rust NAPI bindings
 let rustNative = null;
 try {
@@ -148,11 +149,11 @@ function generateClientManifestWithRoots(cwd, appDir, additionalRoots = []) {
         pathToId[component.absolutePath] = component.id;
         pathToId[normalizedAbsolutePath] = component.id;
         // Map server path to client chunk for SSR
-        ssrModuleMapping[component.absolutePath] = `/_vista/static/chunks/${component.chunkName}.js`;
-        ssrModuleMapping[normalizedAbsolutePath] = `/_vista/static/chunks/${component.chunkName}.js`;
+        ssrModuleMapping[component.absolutePath] = `${constants_1.STATIC_CHUNKS_PATH}${component.chunkName}.js`;
+        ssrModuleMapping[normalizedAbsolutePath] = `${constants_1.STATIC_CHUNKS_PATH}${component.chunkName}.js`;
     }
     // Get or generate build ID
-    const buildIdPath = path_1.default.join(cwd, '.vista', 'BUILD_ID');
+    const buildIdPath = path_1.default.join(cwd, constants_1.BUILD_DIR, 'BUILD_ID');
     let buildId = 'dev';
     try {
         if (fs_1.default.existsSync(buildIdPath)) {

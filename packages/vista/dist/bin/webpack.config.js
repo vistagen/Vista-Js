@@ -10,9 +10,10 @@ const react_refresh_webpack_plugin_1 = __importDefault(require("@pmmmwh/react-re
 const mini_css_extract_plugin_1 = __importDefault(require("mini-css-extract-plugin"));
 const server_component_plugin_1 = require("./server-component-plugin");
 const vista_flight_plugin_1 = require("../build/webpack/plugins/vista-flight-plugin");
+const constants_1 = require("../constants");
 function createWebpackConfig(options) {
     const { cwd, isDev } = options;
-    const vistaDir = path_1.default.join(cwd, '.vista');
+    const vistaDir = path_1.default.join(cwd, constants_1.BUILD_DIR);
     const entryPoint = path_1.default.join(vistaDir, 'client.tsx');
     // Find React - check local node_modules first, then traverse up for monorepo hoisting
     const findModulePath = (moduleName) => {
