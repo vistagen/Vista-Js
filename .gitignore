@@ -1,9 +1,10 @@
 # Node
 node_modules/
-# Ignore dist except for packages/vista/dist (needed for Vercel)
+# Ignore dist except for packages/vista/dist (needed for Render/Vercel)
 dist/
 !packages/vista/dist/
 build/
+!packages/vista/dist/build/
 .next/
 out/
 coverage/
