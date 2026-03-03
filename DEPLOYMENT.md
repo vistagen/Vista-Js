@@ -30,7 +30,7 @@ If you prefer manual configuration:
    - **Runtime:** Node
    - **Build Command:**
      ```
-     cd packages/vista && npm install --legacy-peer-deps && cd ../../apps/web && npm install --legacy-peer-deps && npx vista build
+     cd packages/vista && npm install --legacy-peer-deps && npx tsc && cd ../../apps/web && npm install --legacy-peer-deps && npx vista build
      ```
    - **Start Command:**
      ```
@@ -49,11 +49,13 @@ If you prefer manual configuration:
 ## After Deployment
 
 Your app will be available at:
+
 ```
 https://vista-web-xxxx.onrender.com
 ```
 
 Render automatically:
+
 - Redeploys on every push to `main`
 - Provides free SSL
 - Shows logs in the dashboard
