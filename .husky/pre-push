@@ -1,0 +1,31 @@
+#!/usr/bin/env sh
+
+# Local safety net that mirrors GitHub branch protection.
+# GitHub remains the source of truth; this hook catches mistakes earlier.
+PROTECTED_BRANCHES="main master"
+
+while read -r local_ref local_sha remote_ref remote_sha
+do
+  case "$remote_ref" in
+    refs/heads/*)
+      branch_name="${remote_ref#refs/heads/}"
+
+      for protected_branch in $PROTECTED_BRANCHES
+      do
+        if [ "$branch_name" = "$protected_branch" ]; then
+          echo ""
+          echo "Push blocked by Husky."
+          echo "Direct pushes to '$protected_branch' are not allowed."
+          echo "Create a feature branch and open a Pull Request to '$protected_branch' instead."
+          echo ""
+          echo "Example:"
+          echo "  git checkout -b feature/your-change"
+          echo "  git push -u origin feature/your-change"
+          exit 1
+        fi
+      done
+      ;;
+  esac
+done
+
+exit 0
