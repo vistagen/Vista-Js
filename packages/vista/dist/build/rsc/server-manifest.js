@@ -282,8 +282,8 @@ function buildRoutes(components, appDir) {
             // Static URL pattern + auto mode = static by default
             renderMode = 'static';
         }
-        else if ((rt === 'dynamic' || rt === 'catch-all') && hasStaticParams) {
-            // Dynamic or catch-all URL pattern + generateStaticParams = can be statically generated
+        else if (rt === 'dynamic' && hasStaticParams) {
+            // Dynamic URL pattern + generateStaticParams = can be statically generated
             renderMode = 'static';
         }
         routes.push({

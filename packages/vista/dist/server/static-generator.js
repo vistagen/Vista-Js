@@ -181,21 +181,6 @@ async function prerenderPage(urlPath, route, params, cwd) {
     try {
         const React = require('react');
         const { renderToString } = require('react-dom/server');
-        const isAsyncComponent = (component) => {
-            return (typeof component === 'function' &&
-                component.constructor &&
-                component.constructor.name === 'AsyncFunction');
-        };
-        const renderComponent = async (component, props, child) => {
-            if (isAsyncComponent(component)) {
-                const asyncProps = child === undefined ? props : { ...props, children: child };
-                return component(asyncProps);
-            }
-            if (child === undefined) {
-                return React.createElement(component, props);
-            }
-            return React.createElement(component, props, child);
-        };
         // Load page component from webpack-built server bundle
         const pageModule = require(route.pagePath);
         const PageComponent = pageModule.default;
@@ -204,14 +189,14 @@ async function prerenderPage(urlPath, route, params, cwd) {
             return null;
         }
         // Build the element, passing params as props
-        let element = await renderComponent(PageComponent, { params: params || {} });
+        let element = React.createElement(PageComponent, { params: params || {} });
         // Wrap in layouts (outside-in)
         for (let i = route.layoutPaths.length - 1; i >= 0; i--) {
             try {
                 const layoutModule = require(route.layoutPaths[i]);
                 const LayoutComponent = layoutModule.default;
                 if (LayoutComponent) {
-                    element = await renderComponent(LayoutComponent, { params: params || {}, searchParams: {} }, element);
+                    element = React.createElement(LayoutComponent, { params: params || {}, searchParams: {} }, element);
                 }
             }
             catch {

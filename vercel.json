@@ -18,8 +18,8 @@
       "dest": "/static/pages/docs.html"
     },
     {
-      "src": "^/docs/(.+)$",
-      "dest": "/static/pages/docs/$1.html"
+      "src": "^/docs/.+$",
+      "dest": "/static/pages/docs.html"
     }
   ]
 }
