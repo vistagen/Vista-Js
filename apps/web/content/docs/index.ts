@@ -1,8 +1,18 @@
 import { docsCategoryConfig } from './categories';
+import { createAndGenerateDoc } from './cli-workflow/create-and-generate';
+import { apiRoutesVsTypedApiDoc } from './core-concepts/api-routes-vs-typed-api';
+import { dynamicRoutesAndSlugsDoc } from './core-concepts/dynamic-routes-and-slugs';
 import { routingOverviewDoc } from './core-concepts/routing-overview';
+import { typedApiRuntimeFlowDoc } from './core-concepts/typed-api-runtime-flow';
+import { packagePublishingDoc } from './deployment/package-publishing';
 import { firstStepsDoc } from './getting-started/first-steps';
+import { projectStructureDoc } from './getting-started/project-structure';
+import { typedApiQuickstartDoc } from './getting-started/typed-api-quickstart';
 import { architectureOfSimplicityDoc } from './introduction/architecture-of-simplicity';
 import { theBeginningOfVistaDoc } from './introduction/the-beginning-of-vista';
+import { projectFileStructureDoc } from './reference/project-file-structure';
+import { typedClientReferenceDoc } from './reference/typed-client-reference';
+import { vistaConfigReferenceDoc } from './reference/vista-config-reference';
 import type { CollectedDoc, CollectedHeading, DocsDocSource } from './types';
 
 function slugify(value: string): string {
@@ -41,7 +51,17 @@ const docsSource: DocsDocSource[] = [
   theBeginningOfVistaDoc,
   architectureOfSimplicityDoc,
   firstStepsDoc,
+  projectStructureDoc,
+  typedApiQuickstartDoc,
   routingOverviewDoc,
+  dynamicRoutesAndSlugsDoc,
+  apiRoutesVsTypedApiDoc,
+  typedApiRuntimeFlowDoc,
+  createAndGenerateDoc,
+  vistaConfigReferenceDoc,
+  projectFileStructureDoc,
+  typedClientReferenceDoc,
+  packagePublishingDoc,
 ];
 
 export const allDocs: CollectedDoc[] = docsSource.map((doc) => ({

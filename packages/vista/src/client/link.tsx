@@ -7,9 +7,10 @@ import React, {
   useCallback,
   useState,
   useMemo,
+  useContext,
 } from 'react';
-import { useRouter, usePathname } from './router';
-import { useRSCRouter } from './rsc-router';
+import { RouterContext, usePathname } from './router';
+import { RSCRouterContext, useRSCRouter } from './rsc-router';
 
 /*
  * Vista Link Component
@@ -37,7 +38,7 @@ export interface LinkProps extends Omit<AnchorHTMLAttributes<HTMLAnchorElement>,
   shallow?: boolean;
   /** Force href on child element */
   passHref?: boolean;
-  /** Prefetch strategy: true = viewport+hover, 'auto' = hover-only, false/null = off */
+  /** Prefetch strategy: true = always, 'auto' = production-only (Next-like), false/null = off */
   prefetch?: boolean | 'auto' | null;
   /** Locale for internationalised routing */
   locale?: string | false;
@@ -110,6 +111,25 @@ function isInternalUrl(url: string): boolean {
   return true;
 }
 
+function resolvePrefetchBehavior(prefetch: LinkProps['prefetch']): {
+  viewport: boolean;
+  intent: boolean;
+} {
+  if (prefetch === false || prefetch === null) {
+    return { viewport: false, intent: false };
+  }
+
+  if (prefetch === true) {
+    return { viewport: true, intent: true };
+  }
+
+  const isProduction = process.env.NODE_ENV === 'production';
+  return {
+    viewport: isProduction,
+    intent: isProduction,
+  };
+}
+
 export const Link = React.forwardRef<HTMLAnchorElement, LinkProps>(
   (
     {
@@ -119,7 +139,7 @@ export const Link = React.forwardRef<HTMLAnchorElement, LinkProps>(
       scroll = true,
       shallow,
       passHref,
-      prefetch = true,
+      prefetch = 'auto',
       legacyBehavior,
       children,
       onClick,
@@ -133,13 +153,15 @@ export const Link = React.forwardRef<HTMLAnchorElement, LinkProps>(
   ) => {
     // Try the RSC router first — if we're inside an RSCRouter, use
     // Flight-based navigation. Otherwise fall back to the legacy router.
-    const rscRouter = useRSCRouter();
-    const legacyRouter = useRouter();
-    const pathname = rscRouter ? rscRouter.pathname : usePathname();
+    const rscRouter = useContext(RSCRouterContext);
+    const legacyRouter = useContext(RouterContext);
+    const fallbackPathname = usePathname();
+    const pathname = rscRouter?.pathname ?? legacyRouter?.pathname ?? fallbackPathname;
     const linkRef = useRef<HTMLAnchorElement | null>(null);
     const targetPath = formatUrl(as || href);
     const [isActive, setIsActive] = useState(false);
     const internal = useMemo(() => isInternalUrl(targetPath), [targetPath]);
+    const prefetchBehavior = useMemo(() => resolvePrefetchBehavior(prefetch), [prefetch]);
 
     // Combine refs
     const setRefs = useCallback(
@@ -166,9 +188,10 @@ export const Link = React.forwardRef<HTMLAnchorElement, LinkProps>(
 
     // Prefetch on viewport intersection (skip for external links & auto mode)
     useEffect(() => {
-      if (!prefetch || prefetch === null || prefetch === 'auto') return;
+      if (!prefetchBehavior.viewport) return;
       if (!internal) return;
       if (typeof window === 'undefined') return;
+      if (pathname === targetPath) return;
 
       const element = linkRef.current;
       if (!element) return;
@@ -195,13 +218,13 @@ export const Link = React.forwardRef<HTMLAnchorElement, LinkProps>(
       observer.observe(element);
 
       return () => observer.disconnect();
-    }, [prefetch, targetPath, rscRouter, internal]);
+    }, [prefetchBehavior.viewport, targetPath, pathname, rscRouter, internal]);
 
     // Prefetch on hover
     const handleMouseEnter = useCallback(
       (e: React.MouseEvent<HTMLAnchorElement>) => {
         if (onMouseEnter) onMouseEnter(e);
-        if (prefetch !== false && prefetch !== null && internal) {
+        if (prefetchBehavior.intent && internal && pathname !== targetPath) {
           if (rscRouter) {
             rscRouter.prefetch(targetPath);
           } else {
@@ -209,14 +232,14 @@ export const Link = React.forwardRef<HTMLAnchorElement, LinkProps>(
           }
         }
       },
-      [onMouseEnter, prefetch, targetPath, rscRouter, internal]
+      [onMouseEnter, prefetchBehavior.intent, targetPath, pathname, rscRouter, internal]
     );
 
     // Prefetch on touch (mobile devices)
     const handleTouchStart = useCallback(
       (e: React.TouchEvent<HTMLAnchorElement>) => {
         if (onTouchStart) onTouchStart(e);
-        if (prefetch !== false && prefetch !== null && internal) {
+        if (prefetchBehavior.intent && internal && pathname !== targetPath) {
           if (rscRouter) {
             rscRouter.prefetch(targetPath);
           } else {
@@ -224,7 +247,7 @@ export const Link = React.forwardRef<HTMLAnchorElement, LinkProps>(
           }
         }
       },
-      [onTouchStart, prefetch, targetPath, rscRouter, internal]
+      [onTouchStart, prefetchBehavior.intent, targetPath, pathname, rscRouter, internal]
     );
 
     // Handle navigation
@@ -239,6 +262,7 @@ export const Link = React.forwardRef<HTMLAnchorElement, LinkProps>(
         if (target === '_blank') return; // explicit new tab
         if (!href) return;
         if (!internal) return; // external / mailto / tel
+        if (!rscRouter && !legacyRouter) return; // No router provider -> allow native navigation
 
         e.preventDefault();
 
@@ -251,7 +275,7 @@ export const Link = React.forwardRef<HTMLAnchorElement, LinkProps>(
           } else {
             rscRouter.push(targetPath, { scroll });
           }
-        } else {
+        } else if (legacyRouter) {
           if (replace) {
             legacyRouter.replace(targetPath, { scroll });
           } else {

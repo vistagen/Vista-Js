@@ -442,13 +442,34 @@ export async function buildClient(
     // Initial CSS build
     runPostCSS(cwd, vistaDir);
 
-    // Watch for CSS changes separately (simple approach)
+    // Watch CSS + source files that may affect Tailwind output.
     const chokidar = require('chokidar');
     try {
-      chokidar.watch(path.join(cwd, 'app/**/*.css'), { ignoreInitial: true }).on('change', () => {
-        if (_debug) console.log('CSS changed, rebuilding...');
-        runPostCSS(cwd, vistaDir);
-      });
+      const styleWatchRoots = ['app', 'components', 'content', 'lib', 'ctx', 'data']
+        .map((entry) => path.join(cwd, entry))
+        .filter((entry) => fs.existsSync(entry));
+      let cssTimer: ReturnType<typeof setTimeout> | null = null;
+      const scheduleCSSBuild = () => {
+        if (cssTimer) clearTimeout(cssTimer);
+        cssTimer = setTimeout(() => {
+          if (_debug) console.log('Style source changed, rebuilding CSS...');
+          runPostCSS(cwd, vistaDir);
+        }, 120);
+      };
+
+      chokidar
+        .watch(styleWatchRoots, {
+          ignoreInitial: true,
+          ignored: (watchedPath: string) =>
+            watchedPath.includes(`${path.sep}node_modules${path.sep}`) ||
+            watchedPath.includes(`${path.sep}.git${path.sep}`) ||
+            watchedPath.includes(`${path.sep}.vista${path.sep}`),
+        })
+        .on('all', (_event: string, changedPath: string) => {
+          if (/\.(?:css|[cm]?[jt]sx?|md|mdx)$/i.test(changedPath)) {
+            scheduleCSSBuild();
+          }
+        });
     } catch (e) {
       // chokidar not installed, skip CSS watch
     }

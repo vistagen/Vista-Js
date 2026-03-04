@@ -77,6 +77,25 @@ function resolveFromWorkspace(specifier, cwd) {
 function normalizeModulePath(filePath) {
     return filePath.replace(/\\/g, '/').toLowerCase();
 }
+function shouldInvalidateDevModule(modulePath, cwd) {
+    const normalized = normalizeModulePath(modulePath);
+    const rootPrefix = normalizeModulePath(`${cwd}${path_1.default.sep}`);
+    if (!normalized.startsWith(rootPrefix))
+        return false;
+    if (normalized.includes('/node_modules/'))
+        return false;
+    if (normalized.includes(`/${constants_1.BUILD_DIR.toLowerCase()}/`))
+        return false;
+    return /\.(?:[cm]?[jt]sx?|json)$/i.test(normalized);
+}
+function clearProjectRequireCache(cwd) {
+    for (const key of Object.keys(require.cache)) {
+        if (!shouldInvalidateDevModule(key, cwd))
+            continue;
+        delete require.cache[key];
+        clientDirectiveCache.delete(key);
+    }
+}
 function setupTypeScriptRuntime(cwd) {
     try {
         const swcPath = require.resolve('@swc-node/register', { paths: [cwd] });
@@ -174,18 +193,10 @@ function installSingleReactResolution() {
 function installClientLoadHook(cwd, createClientModuleProxy) {
     if (installedClientLoadHook)
         return;
-    const appDir = path_1.default.join(cwd, 'app');
-    const componentsDir = path_1.default.join(cwd, 'components');
-    const normalizedAppDir = normalizeModulePath(appDir);
-    const normalizedComponentsDir = normalizeModulePath(componentsDir);
     originalCompile = CjsModule.prototype._compile;
     CjsModule.prototype._compile = function (content, filename) {
-        const normalized = normalizeModulePath(filename);
-        const isInAppTree = normalized.startsWith(normalizedAppDir);
-        const isInComponentsTree = normalized.startsWith(normalizedComponentsDir);
-        if ((isInAppTree || isInComponentsTree) &&
-            /\.[jt]sx?$/.test(filename) &&
-            isClientBoundaryFile(filename, content)) {
+        const isJavaScriptModule = /\.[jt]sx?$/.test(filename);
+        if (isJavaScriptModule && isClientBoundaryFile(filename, content)) {
             const moduleId = (0, url_1.pathToFileURL)(filename).href;
             this.exports = createClientModuleProxy(moduleId);
             return;
@@ -254,16 +265,10 @@ function extractParams(pathname, route) {
     }
     return params;
 }
-async function createRouteElement(route, context, isDev) {
+async function createRouteElement(route, context, isDev, cwd) {
     const { params, searchParams, req } = context;
     if (isDev) {
-        for (const key of Object.keys(require.cache)) {
-            if (key.includes(`${path_1.default.sep}app${path_1.default.sep}`) ||
-                key.includes(`${path_1.default.sep}components${path_1.default.sep}`)) {
-                delete require.cache[key];
-                clientDirectiveCache.delete(key);
-            }
-        }
+        clearProjectRequireCache(cwd);
     }
     const PageModule = require(route.pagePath);
     const PageComponent = PageModule.default;
@@ -429,7 +434,7 @@ function startUpstream() {
             }
             const params = extractParams(pathname, route);
             const searchParams = Object.fromEntries(new URLSearchParams(req.query).entries());
-            const element = await createRouteElement(route, { params, searchParams, req }, isDev);
+            const element = await createRouteElement(route, { params, searchParams, req }, isDev, cwd);
             res.setHeader('Content-Type', 'text/x-component');
             res.setHeader('Vary', 'Accept');
             const stream = flightServer.renderToPipeableStream(element, flightManifest, {

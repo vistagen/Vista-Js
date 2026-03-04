@@ -4,7 +4,8 @@ export const firstStepsDoc: DocsDocSource = {
   category: 'getting-started',
   slug: 'first-steps',
   title: 'First Steps',
-  summary: 'Bootstrap a new app, run local dev, and understand the minimum project structure in minutes.',
+  summary:
+    'Bootstrap a new app, run local dev, and understand the minimum project structure in minutes.',
   order: 1,
   updatedAt: '2026-03-04',
   sections: [
@@ -42,12 +43,37 @@ export const firstStepsDoc: DocsDocSource = {
       text: 'Start with one route, one layout, and one data source. Keep scope tight until your core loop is stable.',
     },
     {
+      type: 'heading',
+      level: 2,
+      text: 'First API Implementation',
+    },
+    {
+      type: 'code',
+      language: 'ts',
+      title: 'app/api/health/route.ts',
+      code: `export async function GET() {
+  return Response.json({
+    ok: true,
+    framework: 'vista',
+    timestamp: Date.now(),
+  });
+}`,
+    },
+    {
       type: 'links',
       title: 'Continue',
       links: [
         {
           label: 'Routing Overview',
           href: '/docs/core-concepts/routing-overview',
+        },
+        {
+          label: 'Project Structure',
+          href: '/docs/getting-started/project-structure',
+        },
+        {
+          label: 'Typed API Quickstart',
+          href: '/docs/getting-started/typed-api-quickstart',
         },
       ],
     },

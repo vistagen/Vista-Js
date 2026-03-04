@@ -6,8 +6,6 @@ import CopyCommand from '@/components/CopyCommand';
 export default function Index() {
     return (
         <main className="flex min-h-screen flex-col items-center relative overflow-hidden bg-black selection:bg-primary/20 selection:text-primary pt-16">
-
-            {/* Spotlight Effect */}
             <div
                 className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary rounded-full blur-[120px] opacity-15 pointer-events-none translate-x-1/3 -translate-y-1/3"
             />

@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { Github } from 'lucide-react';
+import Link from 'vista/link';
 import { siteConfig } from '../data/site';
 
 export default function Navbar() {
@@ -35,13 +36,23 @@ export default function Navbar() {
 
                 <div className="flex items-center gap-4 md:gap-6">
                     {siteConfig.nav.map((item) => (
-                        <a
-                            key={item.href}
-                            href={item.href}
-                            className="text-sm font-medium text-zinc-400 hover:text-white transition-colors"
-                        >
-                            {item.title}
-                        </a>
+                        item.href.startsWith('/') ? (
+                            <Link
+                                key={item.href}
+                                href={item.href}
+                                className="text-sm font-medium text-zinc-400 hover:text-white transition-colors"
+                            >
+                                {item.title}
+                            </Link>
+                        ) : (
+                            <a
+                                key={item.href}
+                                href={item.href}
+                                className="text-sm font-medium text-zinc-400 hover:text-white transition-colors"
+                            >
+                                {item.title}
+                            </a>
+                        )
                     ))}
 
                     <div className="w-[1px] h-6 bg-zinc-800" />

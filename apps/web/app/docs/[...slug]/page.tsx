@@ -1,6 +1,7 @@
 import { ActiveSectionObserver } from '../../../components/active-section-observer';
 import { Code } from '../../../components/mdx/code';
 import { allDocs } from 'content-collections';
+import Link from 'vista/link';
 import type { DocsDocSection } from '../../../content/docs';
 import { getCategoryById, getDocNeighbors, getDocPath, normalizeDocRouteSlug } from '../../../lib/docs';
 import { slugify } from '../../../lib/utils';
@@ -10,6 +11,10 @@ type RouteParams = Record<string, string | string[] | undefined | null>;
 
 interface DocsArticlePageProps {
   params?: RouteParams | Promise<RouteParams>;
+}
+
+function isExternalHref(href: string): boolean {
+  return /^(https?:\/\/|mailto:|tel:|#)/i.test(href);
 }
 
 async function resolveRouteParams(input: DocsArticlePageProps['params']): Promise<RouteParams> {
@@ -25,12 +30,12 @@ function renderNotFound() {
       <p className="mt-4 text-base leading-7 text-zinc-400">
         The page you are trying to open does not exist yet, or the slug is invalid.
       </p>
-      <a
+      <Link
         href="/docs"
         className="mt-8 inline-flex rounded-full border border-primary/40 bg-primary/10 px-5 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/15"
       >
         Back to docs home
-      </a>
+      </Link>
     </article>
   );
 }
@@ -103,14 +108,20 @@ function renderSection(section: DocsDocSection, index: number, headingId: string
       <ul className="space-y-2">
         {section.links.map((link) => (
           <li key={`${link.href}-${link.label}`}>
-            <a
-              href={link.href}
-              target={link.external ? '_blank' : undefined}
-              rel={link.external ? 'noopener noreferrer' : undefined}
-              className="text-sm text-primary transition-colors hover:text-primary/80"
-            >
-              {link.label}
-            </a>
+            {link.external || isExternalHref(link.href) ? (
+              <a
+                href={link.href}
+                target={link.external ? '_blank' : undefined}
+                rel={link.external ? 'noopener noreferrer' : undefined}
+                className="text-sm text-primary transition-colors hover:text-primary/80"
+              >
+                {link.label}
+              </a>
+            ) : (
+              <Link href={link.href} className="text-sm text-primary transition-colors hover:text-primary/80">
+                {link.label}
+              </Link>
+            )}
           </li>
         ))}
       </ul>
@@ -137,11 +148,12 @@ export default async function DocsArticlePage({ params }: DocsArticlePageProps) 
   const category = getCategoryById(doc.category);
   const headings = doc.headings;
   const { prev, next } = getDocNeighbors(doc);
+  const showFounderNote = doc._meta.path === 'introduction/the-beginning-of-vista';
   let headingIndex = 0;
 
   return (
     <ActiveSectionObserver headings={headings}>
-      <article className="mx-auto max-w-3xl pb-16 pt-2">
+      <article className="mx-auto max-w-3xl pb-12 pt-2">
         <header className="mb-10 border-b border-zinc-900 pb-8">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
             {category?.title ?? doc.category}
@@ -157,6 +169,12 @@ export default async function DocsArticlePage({ params }: DocsArticlePageProps) 
           <p className="mt-4 max-w-2xl text-lg leading-8 text-zinc-300">{doc.summary}</p>
           <p className="mt-4 text-xs uppercase tracking-[0.12em] text-zinc-500">Updated: {doc.updatedAt}</p>
         </header>
+
+        {showFounderNote ? (
+          <div className="mb-10">
+            <SignatureBlock quote={doc.signatureQuote} />
+          </div>
+        ) : null}
 
         <div className="space-y-6">
           {doc.sections.map((section, index) => {
@@ -176,28 +194,26 @@ export default async function DocsArticlePage({ params }: DocsArticlePageProps) 
 
         <nav className="mt-12 grid gap-3 border-t border-zinc-900 pt-8 sm:grid-cols-2">
           {prev ? (
-            <a
+            <Link
               href={getDocPath(prev)}
               className="rounded-xl border border-zinc-800 bg-zinc-950/60 px-4 py-3 transition-colors hover:border-zinc-700 hover:bg-zinc-900/80"
             >
               <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">Previous</p>
               <p className="mt-1 text-sm font-medium text-zinc-200">{prev.title}</p>
-            </a>
+            </Link>
           ) : (
             <div className="hidden sm:block" />
           )}
           {next ? (
-            <a
+            <Link
               href={getDocPath(next)}
               className="rounded-xl border border-zinc-800 bg-zinc-950/60 px-4 py-3 text-right transition-colors hover:border-zinc-700 hover:bg-zinc-900/80"
             >
               <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">Next</p>
               <p className="mt-1 text-sm font-medium text-zinc-200">{next.title}</p>
-            </a>
+            </Link>
           ) : null}
         </nav>
-
-        <SignatureBlock quote={doc.signatureQuote} />
       </article>
     </ActiveSectionObserver>
   );

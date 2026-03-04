@@ -84,7 +84,10 @@ function installSSRWebpackShim(): void {
 
 type SSRManifest = {
   moduleLoading: { prefix: string; crossOrigin: string | null };
-  moduleMap: Record<string, Record<string, { specifier: string; name: string }>>;
+  moduleMap: Record<
+    string,
+    Record<string, { specifier?: string; id?: string | number; chunks?: string[]; name?: string }>
+  >;
   serverModuleMap?: Record<string, any>;
 };
 
@@ -163,6 +166,28 @@ function resolvePort(raw: string, fallback: number): number {
     throw new Error(`Invalid port: ${raw}`);
   }
   return value;
+}
+
+function normalizeModuleCachePath(filePath: string): string {
+  return filePath.replace(/\\/g, '/').toLowerCase();
+}
+
+function shouldInvalidateDevModule(modulePath: string, cwd: string): boolean {
+  const normalized = normalizeModuleCachePath(modulePath);
+  const rootPrefix = normalizeModuleCachePath(`${cwd}${path.sep}`);
+
+  if (!normalized.startsWith(rootPrefix)) return false;
+  if (normalized.includes('/node_modules/')) return false;
+  if (normalized.includes(`/${BUILD_DIR.toLowerCase()}/`)) return false;
+
+  return /\.(?:[cm]?[jt]sx?|json)$/i.test(normalized);
+}
+
+function clearProjectRequireCache(cwd: string): void {
+  for (const key of Object.keys(require.cache)) {
+    if (!shouldInvalidateDevModule(key, cwd)) continue;
+    delete require.cache[key];
+  }
 }
 
 function resolveFromWorkspace(specifier: string, cwd: string): string {
@@ -300,7 +325,7 @@ function cleanHotUpdateFiles(cwd: string): void {
   }
 }
 
-function findChunkFiles(cwd: string): string[] {
+function findChunkFiles(cwd: string, isDev: boolean): string[] {
   const chunksDir = path.join(cwd, BUILD_DIR, 'static', 'chunks');
   if (!fs.existsSync(chunksDir)) return [];
 
@@ -310,11 +335,17 @@ function findChunkFiles(cwd: string): string[] {
       (name) => name.endsWith('.js') && !name.endsWith('.map') && !name.includes('.hot-update.')
     );
 
+  // In dev, avoid loading stale production artifacts left from a previous build.
+  // Production chunks end with a hash suffix like `main-1a2b3c4d.js`.
+  const normalizedFiles = isDev
+    ? files.filter((name) => !/-[0-9a-f]{8,}\.js$/i.test(name))
+    : files;
+
   // Load webpack runtime first, then framework, then the rest alphabetically.
   // This ensures the chunk registry (__webpack_require__) is available before
   // any deferred chunk tries to self-register.
   const priority = ['webpack.js', 'framework.js', 'vendor.js'];
-  return files.sort((a, b) => {
+  return normalizedFiles.sort((a, b) => {
     const ai = priority.indexOf(a);
     const bi = priority.indexOf(b);
     if (ai !== -1 && bi !== -1) return ai - bi;
@@ -322,6 +353,50 @@ function findChunkFiles(cwd: string): string[] {
     if (bi !== -1) return 1;
     return a.localeCompare(b);
   });
+}
+
+function normalizeSSRManifest(manifest: SSRManifest): SSRManifest {
+  if (!manifest || !manifest.moduleMap) {
+    return manifest;
+  }
+
+  const moduleMap = manifest.moduleMap;
+  const aliasEntries: Array<[string, Record<string, any>]> = [];
+
+  for (const [moduleKey, exportsMap] of Object.entries(moduleMap)) {
+    const normalizedExports: Record<string, { id: string; chunks: string[]; name: string }> = {};
+
+    for (const [exportName, rawEntry] of Object.entries(exportsMap || {})) {
+      const entry = rawEntry || {};
+      const normalizedId = String(entry.id ?? entry.specifier ?? moduleKey);
+      normalizedExports[exportName] = {
+        id: normalizedId,
+        chunks: Array.isArray(entry.chunks) ? entry.chunks : [],
+        name: entry.name || exportName,
+      };
+    }
+
+    moduleMap[moduleKey] = normalizedExports as any;
+    aliasEntries.push([moduleKey, normalizedExports]);
+
+    for (const normalizedEntry of Object.values(normalizedExports)) {
+      const aliasKey = String(normalizedEntry.id);
+      aliasEntries.push([aliasKey, normalizedExports]);
+    }
+  }
+
+  for (const [aliasKey, exportsMap] of aliasEntries) {
+    if (!moduleMap[aliasKey]) {
+      moduleMap[aliasKey] = exportsMap as any;
+    }
+  }
+
+  return manifest;
+}
+
+function loadSSRManifestFromDisk(absolutePath: string): SSRManifest {
+  const manifest = JSON.parse(fs.readFileSync(absolutePath, 'utf-8')) as SSRManifest;
+  return normalizeSSRManifest(manifest);
 }
 
 function matchPattern(pathname: string, pattern: string): boolean {
@@ -399,16 +474,13 @@ async function createRouteElement(
     req: express.Request;
   },
   isDev: boolean,
-  rootLayout: ReturnType<typeof resolveRootLayout>
+  rootLayout: ReturnType<typeof resolveRootLayout>,
+  cwd: string
 ): Promise<{ element: React.ReactElement; metadata: any; rootMode: RootRenderMode }> {
   const { params, searchParams, req } = context;
 
   if (isDev) {
-    for (const key of Object.keys(require.cache)) {
-      if (key.includes(`${path.sep}app${path.sep}`)) {
-        delete require.cache[key];
-      }
-    }
+    clearProjectRequireCache(cwd);
   }
 
   const PageModule = require(route.pagePath);
@@ -653,13 +725,22 @@ async function renderFlightToHTMLStream(
 
   // 3. Decode Flight stream into a React tree
   const flightResponse = flightSSRClient.createFromNodeStream(nodeStream, ssrManifest);
+  let element: React.ReactElement;
 
-  // 4. Wrap in a component that consumes the Flight response
-  function FlightRoot() {
-    return React.use(flightResponse as Promise<React.ReactNode>);
+  // In dev, decode the flight payload before React.use() render path.
+  // This keeps manifest mismatch errors in the request try/catch boundary
+  // instead of crashing the whole process with an uncaught exception.
+  if (isDev) {
+    const resolvedTree = await (flightResponse as Promise<React.ReactNode>);
+    element = React.createElement(React.Fragment, null, resolvedTree);
+  } else {
+    // 4. Wrap in a component that consumes the Flight response
+    function FlightRoot() {
+      return React.use(flightResponse as Promise<React.ReactNode>);
+    }
+
+    element = React.createElement(FlightRoot);
   }
-
-  const element = React.createElement(FlightRoot);
 
   // 5. Build script tags for client chunks
   const scripts = chunkFiles
@@ -841,29 +922,7 @@ export function startRSCServer(options: RSCEngineOptions = {}): void {
       : null;
 
   if (resolvedSSRManifestPath) {
-    ssrManifest = JSON.parse(fs.readFileSync(resolvedSSRManifestPath, 'utf-8')) as SSRManifest;
-    // Normalise SSR manifest entries: ReactFlightWebpackPlugin generates
-    // {specifier, name} but react-server-dom-webpack/client.node expects
-    // {id, chunks, name}.  Our VistaSSRManifestPatch webpack plugin handles
-    // this at build time, but in dev mode the manifest may be re-read from
-    // disk before the patch runs.  Belt-and-suspenders fix:
-    if (ssrManifest && (ssrManifest as any).moduleMap) {
-      const moduleMap = (ssrManifest as any).moduleMap as Record<
-        string,
-        Record<string, { specifier?: string; id?: string; chunks?: string[]; name?: string }>
-      >;
-      for (const exports of Object.values(moduleMap)) {
-        for (const [exportName, entry] of Object.entries(exports)) {
-          if (entry.specifier && !entry.id) {
-            exports[exportName] = {
-              id: entry.specifier,
-              chunks: [],
-              name: entry.name || exportName,
-            };
-          }
-        }
-      }
-    }
+    ssrManifest = loadSSRManifestFromDisk(resolvedSSRManifestPath);
   } else if (flightSSRClient) {
     // Can't use Flight SSR without the manifest
     flightSSRClient = null;
@@ -930,7 +989,7 @@ export function startRSCServer(options: RSCEngineOptions = {}): void {
   // Graceful shutdown — populated after all resources are created
   let shutdownCalled = false;
   let httpServer: ReturnType<typeof app.listen> | null = null;
-  let fsWatcher: fs.FSWatcher | null = null;
+  let fsWatcher: { close: () => void | Promise<void> } | null = null;
 
   const shutdown = () => {
     if (shutdownCalled) return;
@@ -1002,20 +1061,74 @@ export function startRSCServer(options: RSCEngineOptions = {}): void {
       sseReloadClients.forEach((c) => c.write(`data: ${payload}\n\n`));
     };
 
-    // Watch app/ directory — server component changes need a full page reload
-    // because they run on the upstream RSC process (which invalidates
-    // require.cache per-request, so a fresh fetch returns new content).
-    const appDir = path.join(cwd, 'app');
+    const watchExtPattern = /\.(?:[cm]?[jt]sx?|css|md|mdx|json)$/i;
+    const watchRoots = [
+      'app',
+      'components',
+      'content',
+      'lib',
+      'ctx',
+      'data',
+      'middleware.ts',
+      'vista.config.ts',
+      'content-collections.ts',
+    ]
+      .map((entry) => path.join(cwd, entry))
+      .filter((entry) => fs.existsSync(entry));
+
     let reloadTimer: ReturnType<typeof setTimeout> | null = null;
-    fsWatcher = fs.watch(appDir, { recursive: true }, (_event, filename) => {
-      if (filename && /\.[jt]sx?$/.test(filename)) {
-        if (reloadTimer) clearTimeout(reloadTimer);
-        reloadTimer = setTimeout(() => {
-          logEvent('File changed, reloading...');
-          pushSSE('reload');
-        }, 120);
+    const scheduleReload = () => {
+      if (reloadTimer) clearTimeout(reloadTimer);
+      reloadTimer = setTimeout(() => {
+        logEvent('Source changed, reloading...');
+        pushSSE('reload');
+      }, 140);
+    };
+
+    try {
+      const chokidar = require('chokidar');
+      const watcher = chokidar.watch(watchRoots, {
+        ignoreInitial: true,
+        ignored: (watchedPath: string) =>
+          watchedPath.includes(`${path.sep}node_modules${path.sep}`) ||
+          watchedPath.includes(`${path.sep}.git${path.sep}`) ||
+          watchedPath.includes(`${path.sep}${BUILD_DIR}${path.sep}`),
+      });
+
+      watcher.on('all', (_event: string, filePath: string) => {
+        if (filePath && watchExtPattern.test(filePath)) {
+          scheduleReload();
+        }
+      });
+
+      fsWatcher = watcher;
+    } catch {
+      const nativeWatchers: fs.FSWatcher[] = [];
+      const onChange = (_event: string, filePath?: string) => {
+        if (filePath && watchExtPattern.test(filePath)) {
+          scheduleReload();
+        }
+      };
+
+      for (const watchPath of watchRoots) {
+        try {
+          const stat = fs.statSync(watchPath);
+          if (stat.isDirectory()) {
+            nativeWatchers.push(fs.watch(watchPath, { recursive: true }, onChange));
+          } else {
+            nativeWatchers.push(fs.watch(watchPath, onChange));
+          }
+        } catch {
+          // Skip missing or unsupported watch path.
+        }
       }
-    });
+
+      fsWatcher = {
+        close: () => {
+          nativeWatchers.forEach((watcher) => watcher.close());
+        },
+      };
+    }
   }
 
   if (isDev && options.compiler) {
@@ -1048,25 +1161,7 @@ export function startRSCServer(options: RSCEngineOptions = {}): void {
       }
       // Reload SSR manifest on rebuild too
       if (resolvedSSRManifestPath && fs.existsSync(resolvedSSRManifestPath)) {
-        ssrManifest = JSON.parse(fs.readFileSync(resolvedSSRManifestPath, 'utf-8')) as SSRManifest;
-        // Normalise {specifier,name} → {id,chunks,name} (same as initial load)
-        if (ssrManifest && (ssrManifest as any).moduleMap) {
-          const mm = (ssrManifest as any).moduleMap as Record<
-            string,
-            Record<string, { specifier?: string; id?: string; chunks?: string[]; name?: string }>
-          >;
-          for (const exports of Object.values(mm)) {
-            for (const [expName, entry] of Object.entries(exports)) {
-              if (entry.specifier && !entry.id) {
-                exports[expName] = {
-                  id: entry.specifier,
-                  chunks: [],
-                  name: entry.name || expName,
-                };
-              }
-            }
-          }
-        }
+        ssrManifest = loadSSRManifestFromDisk(resolvedSSRManifestPath);
       }
     });
   }
@@ -1317,6 +1412,14 @@ export function startRSCServer(options: RSCEngineOptions = {}): void {
 
     if (useFlightSSR) {
       try {
+        if (isDev && resolvedSSRManifestPath && fs.existsSync(resolvedSSRManifestPath)) {
+          try {
+            ssrManifest = loadSSRManifestFromDisk(resolvedSSRManifestPath);
+          } catch {
+            // Manifest may be mid-write during compilation; keep the last good in-memory copy.
+          }
+        }
+
         // Metadata extraction: still done locally so we have <head> content
         const rootLayout = resolveRootLayout(cwd, isDev);
         const route = matchRoute(req.path, serverManifest.routes);
@@ -1324,11 +1427,7 @@ export function startRSCServer(options: RSCEngineOptions = {}): void {
         let metadataHtml = '';
         if (route) {
           if (isDev) {
-            for (const key of Object.keys(require.cache)) {
-              if (key.includes(`${path.sep}app${path.sep}`)) {
-                delete require.cache[key];
-              }
-            }
+            clearProjectRequireCache(cwd);
           }
           const PageModule = require(route.pagePath);
           let metadata: any = { ...(rootLayout.metadata || {}) };
@@ -1360,7 +1459,7 @@ export function startRSCServer(options: RSCEngineOptions = {}): void {
           req.path,
           req.query ? new URLSearchParams(req.query as any).toString() : '',
           metadataHtml,
-          findChunkFiles(cwd),
+          findChunkFiles(cwd, isDev),
           rootLayout.mode,
           flightSSRClient!,
           ssrManifest!,
@@ -1446,7 +1545,7 @@ export function startRSCServer(options: RSCEngineOptions = {}): void {
           res
             .status(404)
             .type('text/html')
-            .send(createHtmlDocument(html, '', findChunkFiles(cwd), rootLayout.mode));
+            .send(createHtmlDocument(html, '', findChunkFiles(cwd, isDev), rootLayout.mode));
           return;
         }
         res.status(404).type('text/html').send(getStyledNotFoundHTML());
@@ -1459,7 +1558,8 @@ export function startRSCServer(options: RSCEngineOptions = {}): void {
         route,
         { params, searchParams, req },
         isDev,
-        rootLayout
+        rootLayout,
+        cwd
       );
       const appHtml = renderToString(element);
       const { generateMetadataHtml } = require('../metadata/generate');
@@ -1467,7 +1567,7 @@ export function startRSCServer(options: RSCEngineOptions = {}): void {
       res
         .status(200)
         .type('text/html')
-        .send(createHtmlDocument(appHtml, metadataHtml, findChunkFiles(cwd), rootMode));
+        .send(createHtmlDocument(appHtml, metadataHtml, findChunkFiles(cwd, isDev), rootMode));
     } catch (error: any) {
       if (error?.name === 'NotFoundError') {
         try {
@@ -1487,7 +1587,7 @@ export function startRSCServer(options: RSCEngineOptions = {}): void {
             res
               .status(404)
               .type('text/html')
-              .send(createHtmlDocument(html, '', findChunkFiles(cwd), rootLayout.mode));
+              .send(createHtmlDocument(html, '', findChunkFiles(cwd, isDev), rootLayout.mode));
             return;
           }
           res.status(404).type('text/html').send(getStyledNotFoundHTML());

@@ -50,6 +50,53 @@ function runPostCSS(cwd, vistaDir) {
         }
     }
 }
+function hasUseClientDirective(filePath) {
+    try {
+        const source = fs_1.default.readFileSync(filePath, 'utf-8');
+        return /^\s*['"]use client['"]\s*;?/m.test(source);
+    }
+    catch {
+        return false;
+    }
+}
+function collectUseClientFiles(dir, collected) {
+    if (!fs_1.default.existsSync(dir))
+        return;
+    const entries = fs_1.default.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+        const absolutePath = path_1.default.join(dir, entry.name);
+        if (entry.isDirectory()) {
+            collectUseClientFiles(absolutePath, collected);
+            continue;
+        }
+        if (!entry.isFile() || !entry.name.endsWith('.js')) {
+            continue;
+        }
+        if (hasUseClientDirective(absolutePath)) {
+            collected.add(path_1.default.resolve(absolutePath));
+        }
+    }
+}
+function resolvePackageRoot(cwd, packageName) {
+    try {
+        return path_1.default.dirname(require.resolve(`${packageName}/package.json`, { paths: [cwd] }));
+    }
+    catch {
+        return null;
+    }
+}
+function collectFrameworkClientReferences(cwd) {
+    const roots = [resolvePackageRoot(cwd, 'vista'), resolvePackageRoot(cwd, '@vistagenic/vista')].filter((value) => Boolean(value));
+    if (roots.length === 0) {
+        return [];
+    }
+    const collected = new Set();
+    for (const packageRoot of roots) {
+        collectUseClientFiles(path_1.default.join(packageRoot, 'dist', 'client'), collected);
+        collectUseClientFiles(path_1.default.join(packageRoot, 'dist', 'components'), collected);
+    }
+    return Array.from(collected);
+}
 /**
  * Generate the RSC-aware client entry file
  */
@@ -236,6 +283,15 @@ async function buildRSC(watch = false) {
             }
         }
     }
+    // Include framework-level client boundaries (e.g. vista/link) so external
+    // package client modules resolve in React Flight manifests.
+    const frameworkClientReferences = collectFrameworkClientReferences(cwd);
+    if (frameworkClientReferences.length > 0) {
+        clientReferenceFiles = Array.from(new Set([...clientReferenceFiles, ...frameworkClientReferences]));
+        if (_debug) {
+            console.log(`[Vista JS RSC] Added ${frameworkClientReferences.length} framework client references`);
+        }
+    }
     // Generate manifests
     if (_debug)
         console.log('[vista:build] Generating manifests...');
@@ -301,13 +357,33 @@ async function buildRSC(watch = false) {
         const clientConfig = (0, compiler_1.createClientWebpackConfig)(options);
         const clientCompiler = (0, webpack_1.default)(clientConfig);
         syncReactServerManifests(vistaDirs.root);
-        // Watch for CSS changes
+        // Watch for CSS + source changes that can affect Tailwind output.
         try {
             const chokidar = require('chokidar');
-            chokidar.watch(path_1.default.join(cwd, 'app/**/*.css'), { ignoreInitial: true }).on('change', () => {
-                if (_debug)
-                    console.log('[Vista JS RSC] CSS changed, rebuilding...');
-                runPostCSS(cwd, vistaDirs.root);
+            const styleWatchRoots = ['app', 'components', 'content', 'lib', 'ctx', 'data']
+                .map((entry) => path_1.default.join(cwd, entry))
+                .filter((entry) => fs_1.default.existsSync(entry));
+            let cssTimer = null;
+            const scheduleCSSBuild = () => {
+                if (cssTimer)
+                    clearTimeout(cssTimer);
+                cssTimer = setTimeout(() => {
+                    if (_debug)
+                        console.log('[Vista JS RSC] Style source changed, rebuilding CSS...');
+                    runPostCSS(cwd, vistaDirs.root);
+                }, 120);
+            };
+            chokidar
+                .watch(styleWatchRoots, {
+                ignoreInitial: true,
+                ignored: (watchedPath) => watchedPath.includes(`${path_1.default.sep}node_modules${path_1.default.sep}`) ||
+                    watchedPath.includes(`${path_1.default.sep}.git${path_1.default.sep}`) ||
+                    watchedPath.includes(`${path_1.default.sep}.vista${path_1.default.sep}`),
+            })
+                .on('all', (_event, changedPath) => {
+                if (/\.(?:css|[cm]?[jt]sx?|md|mdx)$/i.test(changedPath)) {
+                    scheduleCSSBuild();
+                }
             });
         }
         catch (e) {

@@ -8,11 +8,16 @@ services:
     region: oregon
     plan: free
     buildCommand: |
-      cd packages/vista && NODE_ENV=development npm install --ignore-scripts --no-audit --no-fund && cd ../../apps/web && NODE_ENV=development npm install --no-audit --no-fund && npx tsx ../../packages/vista/bin/vista.js build
-    startCommand: cd apps/web && npx tsx ../../packages/vista/bin/vista.js start
+      npm --prefix packages/vista install --no-package-lock --include=dev --no-audit --no-fund
+      npm --prefix apps/web install --no-package-lock --include=dev --no-audit --no-fund
+      npm --prefix packages/vista run build
+      npm --prefix apps/web run build
+    startCommand: npm --prefix apps/web run start
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 3003
+      - key: NPM_CONFIG_LEGACY_PEER_DEPS
+        value: "true"
     healthCheckPath: /

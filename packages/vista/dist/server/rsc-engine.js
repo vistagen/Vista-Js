@@ -114,6 +114,27 @@ function resolvePort(raw, fallback) {
     }
     return value;
 }
+function normalizeModuleCachePath(filePath) {
+    return filePath.replace(/\\/g, '/').toLowerCase();
+}
+function shouldInvalidateDevModule(modulePath, cwd) {
+    const normalized = normalizeModuleCachePath(modulePath);
+    const rootPrefix = normalizeModuleCachePath(`${cwd}${path_1.default.sep}`);
+    if (!normalized.startsWith(rootPrefix))
+        return false;
+    if (normalized.includes('/node_modules/'))
+        return false;
+    if (normalized.includes(`/${constants_1.BUILD_DIR.toLowerCase()}/`))
+        return false;
+    return /\.(?:[cm]?[jt]sx?|json)$/i.test(normalized);
+}
+function clearProjectRequireCache(cwd) {
+    for (const key of Object.keys(require.cache)) {
+        if (!shouldInvalidateDevModule(key, cwd))
+            continue;
+        delete require.cache[key];
+    }
+}
 function resolveFromWorkspace(specifier, cwd) {
     const searchRoots = [
         cwd,
@@ -241,18 +262,23 @@ function cleanHotUpdateFiles(cwd) {
         }
     }
 }
-function findChunkFiles(cwd) {
+function findChunkFiles(cwd, isDev) {
     const chunksDir = path_1.default.join(cwd, constants_1.BUILD_DIR, 'static', 'chunks');
     if (!fs_1.default.existsSync(chunksDir))
         return [];
     const files = fs_1.default
         .readdirSync(chunksDir)
         .filter((name) => name.endsWith('.js') && !name.endsWith('.map') && !name.includes('.hot-update.'));
+    // In dev, avoid loading stale production artifacts left from a previous build.
+    // Production chunks end with a hash suffix like `main-1a2b3c4d.js`.
+    const normalizedFiles = isDev
+        ? files.filter((name) => !/-[0-9a-f]{8,}\.js$/i.test(name))
+        : files;
     // Load webpack runtime first, then framework, then the rest alphabetically.
     // This ensures the chunk registry (__webpack_require__) is available before
     // any deferred chunk tries to self-register.
     const priority = ['webpack.js', 'framework.js', 'vendor.js'];
-    return files.sort((a, b) => {
+    return normalizedFiles.sort((a, b) => {
         const ai = priority.indexOf(a);
         const bi = priority.indexOf(b);
         if (ai !== -1 && bi !== -1)
@@ -263,6 +289,41 @@ function findChunkFiles(cwd) {
             return 1;
         return a.localeCompare(b);
     });
+}
+function normalizeSSRManifest(manifest) {
+    if (!manifest || !manifest.moduleMap) {
+        return manifest;
+    }
+    const moduleMap = manifest.moduleMap;
+    const aliasEntries = [];
+    for (const [moduleKey, exportsMap] of Object.entries(moduleMap)) {
+        const normalizedExports = {};
+        for (const [exportName, rawEntry] of Object.entries(exportsMap || {})) {
+            const entry = rawEntry || {};
+            const normalizedId = String(entry.id ?? entry.specifier ?? moduleKey);
+            normalizedExports[exportName] = {
+                id: normalizedId,
+                chunks: Array.isArray(entry.chunks) ? entry.chunks : [],
+                name: entry.name || exportName,
+            };
+        }
+        moduleMap[moduleKey] = normalizedExports;
+        aliasEntries.push([moduleKey, normalizedExports]);
+        for (const normalizedEntry of Object.values(normalizedExports)) {
+            const aliasKey = String(normalizedEntry.id);
+            aliasEntries.push([aliasKey, normalizedExports]);
+        }
+    }
+    for (const [aliasKey, exportsMap] of aliasEntries) {
+        if (!moduleMap[aliasKey]) {
+            moduleMap[aliasKey] = exportsMap;
+        }
+    }
+    return manifest;
+}
+function loadSSRManifestFromDisk(absolutePath) {
+    const manifest = JSON.parse(fs_1.default.readFileSync(absolutePath, 'utf-8'));
+    return normalizeSSRManifest(manifest);
 }
 function matchPattern(pathname, pattern) {
     const patternParts = pattern.split('/').filter(Boolean);
@@ -326,14 +387,10 @@ function extractParams(pathname, route) {
     }
     return params;
 }
-async function createRouteElement(route, context, isDev, rootLayout) {
+async function createRouteElement(route, context, isDev, rootLayout, cwd) {
     const { params, searchParams, req } = context;
     if (isDev) {
-        for (const key of Object.keys(require.cache)) {
-            if (key.includes(`${path_1.default.sep}app${path_1.default.sep}`)) {
-                delete require.cache[key];
-            }
-        }
+        clearProjectRequireCache(cwd);
     }
     const PageModule = require(route.pagePath);
     const PageComponent = PageModule.default;
@@ -520,11 +577,21 @@ async function renderFlightToHTMLStream(upstreamOrigin, pathname, search, metada
     const nodeStream = stream_1.Readable.fromWeb(upstream.body);
     // 3. Decode Flight stream into a React tree
     const flightResponse = flightSSRClient.createFromNodeStream(nodeStream, ssrManifest);
-    // 4. Wrap in a component that consumes the Flight response
-    function FlightRoot() {
-        return react_1.default.use(flightResponse);
+    let element;
+    // In dev, decode the flight payload before React.use() render path.
+    // This keeps manifest mismatch errors in the request try/catch boundary
+    // instead of crashing the whole process with an uncaught exception.
+    if (isDev) {
+        const resolvedTree = await flightResponse;
+        element = react_1.default.createElement(react_1.default.Fragment, null, resolvedTree);
     }
-    const element = react_1.default.createElement(FlightRoot);
+    else {
+        // 4. Wrap in a component that consumes the Flight response
+        function FlightRoot() {
+            return react_1.default.use(flightResponse);
+        }
+        element = react_1.default.createElement(FlightRoot);
+    }
     // 5. Build script tags for client chunks
     const scripts = chunkFiles
         .map((chunk) => `<script defer src="${constants_1.STATIC_CHUNKS_PATH}${chunk}"></script>`)
@@ -669,26 +736,7 @@ function startRSCServer(options = {}) {
             ? ssrManifestLegacyPath
             : null;
     if (resolvedSSRManifestPath) {
-        ssrManifest = JSON.parse(fs_1.default.readFileSync(resolvedSSRManifestPath, 'utf-8'));
-        // Normalise SSR manifest entries: ReactFlightWebpackPlugin generates
-        // {specifier, name} but react-server-dom-webpack/client.node expects
-        // {id, chunks, name}.  Our VistaSSRManifestPatch webpack plugin handles
-        // this at build time, but in dev mode the manifest may be re-read from
-        // disk before the patch runs.  Belt-and-suspenders fix:
-        if (ssrManifest && ssrManifest.moduleMap) {
-            const moduleMap = ssrManifest.moduleMap;
-            for (const exports of Object.values(moduleMap)) {
-                for (const [exportName, entry] of Object.entries(exports)) {
-                    if (entry.specifier && !entry.id) {
-                        exports[exportName] = {
-                            id: entry.specifier,
-                            chunks: [],
-                            name: entry.name || exportName,
-                        };
-                    }
-                }
-            }
-        }
+        ssrManifest = loadSSRManifestFromDisk(resolvedSSRManifestPath);
     }
     else if (flightSSRClient) {
         // Can't use Flight SSR without the manifest
@@ -814,21 +862,71 @@ function startRSCServer(options = {}) {
         const pushSSE = (payload) => {
             sseReloadClients.forEach((c) => c.write(`data: ${payload}\n\n`));
         };
-        // Watch app/ directory — server component changes need a full page reload
-        // because they run on the upstream RSC process (which invalidates
-        // require.cache per-request, so a fresh fetch returns new content).
-        const appDir = path_1.default.join(cwd, 'app');
+        const watchExtPattern = /\.(?:[cm]?[jt]sx?|css|md|mdx|json)$/i;
+        const watchRoots = [
+            'app',
+            'components',
+            'content',
+            'lib',
+            'ctx',
+            'data',
+            'middleware.ts',
+            'vista.config.ts',
+            'content-collections.ts',
+        ]
+            .map((entry) => path_1.default.join(cwd, entry))
+            .filter((entry) => fs_1.default.existsSync(entry));
         let reloadTimer = null;
-        fsWatcher = fs_1.default.watch(appDir, { recursive: true }, (_event, filename) => {
-            if (filename && /\.[jt]sx?$/.test(filename)) {
-                if (reloadTimer)
-                    clearTimeout(reloadTimer);
-                reloadTimer = setTimeout(() => {
-                    (0, logger_1.logEvent)('File changed, reloading...');
-                    pushSSE('reload');
-                }, 120);
+        const scheduleReload = () => {
+            if (reloadTimer)
+                clearTimeout(reloadTimer);
+            reloadTimer = setTimeout(() => {
+                (0, logger_1.logEvent)('Source changed, reloading...');
+                pushSSE('reload');
+            }, 140);
+        };
+        try {
+            const chokidar = require('chokidar');
+            const watcher = chokidar.watch(watchRoots, {
+                ignoreInitial: true,
+                ignored: (watchedPath) => watchedPath.includes(`${path_1.default.sep}node_modules${path_1.default.sep}`) ||
+                    watchedPath.includes(`${path_1.default.sep}.git${path_1.default.sep}`) ||
+                    watchedPath.includes(`${path_1.default.sep}${constants_1.BUILD_DIR}${path_1.default.sep}`),
+            });
+            watcher.on('all', (_event, filePath) => {
+                if (filePath && watchExtPattern.test(filePath)) {
+                    scheduleReload();
+                }
+            });
+            fsWatcher = watcher;
+        }
+        catch {
+            const nativeWatchers = [];
+            const onChange = (_event, filePath) => {
+                if (filePath && watchExtPattern.test(filePath)) {
+                    scheduleReload();
+                }
+            };
+            for (const watchPath of watchRoots) {
+                try {
+                    const stat = fs_1.default.statSync(watchPath);
+                    if (stat.isDirectory()) {
+                        nativeWatchers.push(fs_1.default.watch(watchPath, { recursive: true }, onChange));
+                    }
+                    else {
+                        nativeWatchers.push(fs_1.default.watch(watchPath, onChange));
+                    }
+                }
+                catch {
+                    // Skip missing or unsupported watch path.
+                }
             }
-        });
+            fsWatcher = {
+                close: () => {
+                    nativeWatchers.forEach((watcher) => watcher.close());
+                },
+            };
+        }
     }
     if (isDev && options.compiler) {
         app.use((0, webpack_dev_middleware_1.default)(options.compiler, {
@@ -856,22 +954,7 @@ function startRSCServer(options = {}) {
             }
             // Reload SSR manifest on rebuild too
             if (resolvedSSRManifestPath && fs_1.default.existsSync(resolvedSSRManifestPath)) {
-                ssrManifest = JSON.parse(fs_1.default.readFileSync(resolvedSSRManifestPath, 'utf-8'));
-                // Normalise {specifier,name} → {id,chunks,name} (same as initial load)
-                if (ssrManifest && ssrManifest.moduleMap) {
-                    const mm = ssrManifest.moduleMap;
-                    for (const exports of Object.values(mm)) {
-                        for (const [expName, entry] of Object.entries(exports)) {
-                            if (entry.specifier && !entry.id) {
-                                exports[expName] = {
-                                    id: entry.specifier,
-                                    chunks: [],
-                                    name: entry.name || expName,
-                                };
-                            }
-                        }
-                    }
-                }
+                ssrManifest = loadSSRManifestFromDisk(resolvedSSRManifestPath);
             }
         });
     }
@@ -1082,17 +1165,21 @@ function startRSCServer(options = {}) {
         // ==================================================================
         if (useFlightSSR) {
             try {
+                if (isDev && resolvedSSRManifestPath && fs_1.default.existsSync(resolvedSSRManifestPath)) {
+                    try {
+                        ssrManifest = loadSSRManifestFromDisk(resolvedSSRManifestPath);
+                    }
+                    catch {
+                        // Manifest may be mid-write during compilation; keep the last good in-memory copy.
+                    }
+                }
                 // Metadata extraction: still done locally so we have <head> content
                 const rootLayout = (0, root_resolver_1.resolveRootLayout)(cwd, isDev);
                 const route = matchRoute(req.path, serverManifest.routes);
                 let metadataHtml = '';
                 if (route) {
                     if (isDev) {
-                        for (const key of Object.keys(require.cache)) {
-                            if (key.includes(`${path_1.default.sep}app${path_1.default.sep}`)) {
-                                delete require.cache[key];
-                            }
-                        }
+                        clearProjectRequireCache(cwd);
                     }
                     const PageModule = require(route.pagePath);
                     let metadata = { ...(rootLayout.metadata || {}) };
@@ -1114,7 +1201,7 @@ function startRSCServer(options = {}) {
                     metadataHtml = metadata ? generateMetadataHtml(metadata) : '';
                 }
                 // Render the page via Flight stream → SSR
-                await renderFlightToHTMLStream(upstreamOrigin, req.path, req.query ? new URLSearchParams(req.query).toString() : '', metadataHtml, findChunkFiles(cwd), rootLayout.mode, flightSSRClient, ssrManifest, res, isDev);
+                await renderFlightToHTMLStream(upstreamOrigin, req.path, req.query ? new URLSearchParams(req.query).toString() : '', metadataHtml, findChunkFiles(cwd, isDev), rootLayout.mode, flightSSRClient, ssrManifest, res, isDev);
                 return;
             }
             catch (flightError) {
@@ -1182,7 +1269,7 @@ function startRSCServer(options = {}) {
                     res
                         .status(404)
                         .type('text/html')
-                        .send(createHtmlDocument(html, '', findChunkFiles(cwd), rootLayout.mode));
+                        .send(createHtmlDocument(html, '', findChunkFiles(cwd, isDev), rootLayout.mode));
                     return;
                 }
                 res.status(404).type('text/html').send((0, not_found_page_1.getStyledNotFoundHTML)());
@@ -1190,14 +1277,14 @@ function startRSCServer(options = {}) {
             }
             const params = extractParams(req.path, route);
             const searchParams = Object.fromEntries(new URLSearchParams(req.query).entries());
-            const { element, metadata, rootMode } = await createRouteElement(route, { params, searchParams, req }, isDev, rootLayout);
+            const { element, metadata, rootMode } = await createRouteElement(route, { params, searchParams, req }, isDev, rootLayout, cwd);
             const appHtml = (0, server_1.renderToString)(element);
             const { generateMetadataHtml } = require('../metadata/generate');
             const metadataHtml = metadata ? generateMetadataHtml(metadata) : '';
             res
                 .status(200)
                 .type('text/html')
-                .send(createHtmlDocument(appHtml, metadataHtml, findChunkFiles(cwd), rootMode));
+                .send(createHtmlDocument(appHtml, metadataHtml, findChunkFiles(cwd, isDev), rootMode));
         }
         catch (error) {
             if (error?.name === 'NotFoundError') {
@@ -1214,7 +1301,7 @@ function startRSCServer(options = {}) {
                         res
                             .status(404)
                             .type('text/html')
-                            .send(createHtmlDocument(html, '', findChunkFiles(cwd), rootLayout.mode));
+                            .send(createHtmlDocument(html, '', findChunkFiles(cwd, isDev), rootLayout.mode));
                         return;
                     }
                     res.status(404).type('text/html').send((0, not_found_page_1.getStyledNotFoundHTML)());

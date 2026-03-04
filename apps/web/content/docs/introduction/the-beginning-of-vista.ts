@@ -8,6 +8,8 @@ export const theBeginningOfVistaDoc: DocsDocSource = {
     'Vista started from one idea: keep the power of modern frameworks, cut the noise, and let developers ship with less code.',
   order: 1,
   updatedAt: '2026-03-04',
+  signatureQuote:
+    'Vista was started to remove repeated setup friction from product teams. The vision is simple: fewer files to think about, less boilerplate to maintain, and a runtime that still gives you full control when your app grows.',
   sections: [
     {
       type: 'paragraph',
