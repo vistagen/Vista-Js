@@ -96,6 +96,25 @@ function normalizeModulePath(filePath: string): string {
   return filePath.replace(/\\/g, '/').toLowerCase();
 }
 
+function shouldInvalidateDevModule(modulePath: string, cwd: string): boolean {
+  const normalized = normalizeModulePath(modulePath);
+  const rootPrefix = normalizeModulePath(`${cwd}${path.sep}`);
+
+  if (!normalized.startsWith(rootPrefix)) return false;
+  if (normalized.includes('/node_modules/')) return false;
+  if (normalized.includes(`/${BUILD_DIR.toLowerCase()}/`)) return false;
+
+  return /\.(?:[cm]?[jt]sx?|json)$/i.test(normalized);
+}
+
+function clearProjectRequireCache(cwd: string): void {
+  for (const key of Object.keys(require.cache)) {
+    if (!shouldInvalidateDevModule(key, cwd)) continue;
+    delete require.cache[key];
+    clientDirectiveCache.delete(key);
+  }
+}
+
 function setupTypeScriptRuntime(cwd: string): void {
   try {
     const swcPath = require.resolve('@swc-node/register', { paths: [cwd] });
@@ -203,22 +222,12 @@ function installSingleReactResolution(): void {
 function installClientLoadHook(cwd: string, createClientModuleProxy: (id: string) => any): void {
   if (installedClientLoadHook) return;
 
-  const appDir = path.join(cwd, 'app');
-  const componentsDir = path.join(cwd, 'components');
-  const normalizedAppDir = normalizeModulePath(appDir);
-  const normalizedComponentsDir = normalizeModulePath(componentsDir);
   originalCompile = CjsModule.prototype._compile;
 
   CjsModule.prototype._compile = function (content: string, filename: string) {
-    const normalized = normalizeModulePath(filename);
-    const isInAppTree = normalized.startsWith(normalizedAppDir);
-    const isInComponentsTree = normalized.startsWith(normalizedComponentsDir);
+    const isJavaScriptModule = /\.[jt]sx?$/.test(filename);
 
-    if (
-      (isInAppTree || isInComponentsTree) &&
-      /\.[jt]sx?$/.test(filename) &&
-      isClientBoundaryFile(filename, content)
-    ) {
+    if (isJavaScriptModule && isClientBoundaryFile(filename, content)) {
       const moduleId = pathToFileURL(filename).href;
       this.exports = createClientModuleProxy(moduleId);
       return;
@@ -302,20 +311,13 @@ async function createRouteElement(
     searchParams: Record<string, string>;
     req: express.Request;
   },
-  isDev: boolean
+  isDev: boolean,
+  cwd: string
 ): Promise<React.ReactElement> {
   const { params, searchParams, req } = context;
 
   if (isDev) {
-    for (const key of Object.keys(require.cache)) {
-      if (
-        key.includes(`${path.sep}app${path.sep}`) ||
-        key.includes(`${path.sep}components${path.sep}`)
-      ) {
-        delete require.cache[key];
-        clientDirectiveCache.delete(key);
-      }
-    }
+    clearProjectRequireCache(cwd);
   }
 
   const PageModule = require(route.pagePath);
@@ -520,7 +522,7 @@ function startUpstream(): void {
 
       const params = extractParams(pathname, route);
       const searchParams = Object.fromEntries(new URLSearchParams(req.query as any).entries());
-      const element = await createRouteElement(route, { params, searchParams, req }, isDev);
+      const element = await createRouteElement(route, { params, searchParams, req }, isDev, cwd);
 
       res.setHeader('Content-Type', 'text/x-component');
       res.setHeader('Vary', 'Accept');

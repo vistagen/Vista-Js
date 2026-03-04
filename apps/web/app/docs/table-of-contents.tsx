@@ -26,6 +26,11 @@ export default function TableOfContents({ mode = 'desktop' }: TableOfContentsPro
   const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
+    // Prevent stale mobile drawer overlay when navigating between docs routes.
+    setIsOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
     const parts = pathname.split('/').filter(Boolean);
     const isDocsArticleRoute = parts.length >= 3 && parts[0] === 'docs';
     if (!isDocsArticleRoute) {

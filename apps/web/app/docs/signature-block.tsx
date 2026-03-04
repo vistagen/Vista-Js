@@ -3,7 +3,7 @@ interface SignatureBlockProps {
 }
 
 const DEFAULT_QUOTE =
-  'The goal is simple: help developers build faster, with less code, and still keep full control of their product.';
+  'The goal is simple: help developers build faster with less code, while keeping the architecture clear enough to scale with confidence.';
 
 export default function SignatureBlock({ quote = DEFAULT_QUOTE }: SignatureBlockProps) {
   return (

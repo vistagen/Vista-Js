@@ -9,6 +9,8 @@ build/
 out/
 coverage/
 .turbo/
+.nx/
+**/.nx/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

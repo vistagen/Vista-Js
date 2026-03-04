@@ -17,7 +17,7 @@ export interface LinkProps extends Omit<AnchorHTMLAttributes<HTMLAnchorElement>,
     shallow?: boolean;
     /** Force href on child element */
     passHref?: boolean;
-    /** Prefetch strategy: true = viewport+hover, 'auto' = hover-only, false/null = off */
+    /** Prefetch strategy: true = always, 'auto' = production-only (Next-like), false/null = off */
     prefetch?: boolean | 'auto' | null;
     /** Locale for internationalised routing */
     locale?: string | false;

@@ -102,16 +102,31 @@ function isInternalUrl(url) {
     }
     return true;
 }
-exports.Link = react_1.default.forwardRef(({ href, as, replace, scroll = true, shallow, passHref, prefetch = true, legacyBehavior, children, onClick, onMouseEnter, onTouchStart, onNavigate, target, ...props }, ref) => {
+function resolvePrefetchBehavior(prefetch) {
+    if (prefetch === false || prefetch === null) {
+        return { viewport: false, intent: false };
+    }
+    if (prefetch === true) {
+        return { viewport: true, intent: true };
+    }
+    const isProduction = process.env.NODE_ENV === 'production';
+    return {
+        viewport: isProduction,
+        intent: isProduction,
+    };
+}
+exports.Link = react_1.default.forwardRef(({ href, as, replace, scroll = true, shallow, passHref, prefetch = 'auto', legacyBehavior, children, onClick, onMouseEnter, onTouchStart, onNavigate, target, ...props }, ref) => {
     // Try the RSC router first — if we're inside an RSCRouter, use
     // Flight-based navigation. Otherwise fall back to the legacy router.
-    const rscRouter = (0, rsc_router_1.useRSCRouter)();
-    const legacyRouter = (0, router_1.useRouter)();
-    const pathname = rscRouter ? rscRouter.pathname : (0, router_1.usePathname)();
+    const rscRouter = (0, react_1.useContext)(rsc_router_1.RSCRouterContext);
+    const legacyRouter = (0, react_1.useContext)(router_1.RouterContext);
+    const fallbackPathname = (0, router_1.usePathname)();
+    const pathname = rscRouter?.pathname ?? legacyRouter?.pathname ?? fallbackPathname;
     const linkRef = (0, react_1.useRef)(null);
     const targetPath = formatUrl(as || href);
     const [isActive, setIsActive] = (0, react_1.useState)(false);
     const internal = (0, react_1.useMemo)(() => isInternalUrl(targetPath), [targetPath]);
+    const prefetchBehavior = (0, react_1.useMemo)(() => resolvePrefetchBehavior(prefetch), [prefetch]);
     // Combine refs
     const setRefs = (0, react_1.useCallback)((node) => {
         linkRef.current = node;
@@ -133,11 +148,13 @@ exports.Link = react_1.default.forwardRef(({ href, as, replace, scroll = true, s
     }, [targetPath, pathname]);
     // Prefetch on viewport intersection (skip for external links & auto mode)
     (0, react_1.useEffect)(() => {
-        if (!prefetch || prefetch === null || prefetch === 'auto')
+        if (!prefetchBehavior.viewport)
             return;
         if (!internal)
             return;
         if (typeof window === 'undefined')
+            return;
+        if (pathname === targetPath)
             return;
         const element = linkRef.current;
         if (!element)
@@ -160,12 +177,12 @@ exports.Link = react_1.default.forwardRef(({ href, as, replace, scroll = true, s
         });
         observer.observe(element);
         return () => observer.disconnect();
-    }, [prefetch, targetPath, rscRouter, internal]);
+    }, [prefetchBehavior.viewport, targetPath, pathname, rscRouter, internal]);
     // Prefetch on hover
     const handleMouseEnter = (0, react_1.useCallback)((e) => {
         if (onMouseEnter)
             onMouseEnter(e);
-        if (prefetch !== false && prefetch !== null && internal) {
+        if (prefetchBehavior.intent && internal && pathname !== targetPath) {
             if (rscRouter) {
                 rscRouter.prefetch(targetPath);
             }
@@ -173,12 +190,12 @@ exports.Link = react_1.default.forwardRef(({ href, as, replace, scroll = true, s
                 prefetchUrl(targetPath);
             }
         }
-    }, [onMouseEnter, prefetch, targetPath, rscRouter, internal]);
+    }, [onMouseEnter, prefetchBehavior.intent, targetPath, pathname, rscRouter, internal]);
     // Prefetch on touch (mobile devices)
     const handleTouchStart = (0, react_1.useCallback)((e) => {
         if (onTouchStart)
             onTouchStart(e);
-        if (prefetch !== false && prefetch !== null && internal) {
+        if (prefetchBehavior.intent && internal && pathname !== targetPath) {
             if (rscRouter) {
                 rscRouter.prefetch(targetPath);
             }
@@ -186,7 +203,7 @@ exports.Link = react_1.default.forwardRef(({ href, as, replace, scroll = true, s
                 prefetchUrl(targetPath);
             }
         }
-    }, [onTouchStart, prefetch, targetPath, rscRouter, internal]);
+    }, [onTouchStart, prefetchBehavior.intent, targetPath, pathname, rscRouter, internal]);
     // Handle navigation
     const handleClick = (0, react_1.useCallback)((e) => {
         if (onClick)
@@ -204,6 +221,8 @@ exports.Link = react_1.default.forwardRef(({ href, as, replace, scroll = true, s
             return;
         if (!internal)
             return; // external / mailto / tel
+        if (!rscRouter && !legacyRouter)
+            return; // No router provider -> allow native navigation
         e.preventDefault();
         if (onNavigate)
             onNavigate();
@@ -216,7 +235,7 @@ exports.Link = react_1.default.forwardRef(({ href, as, replace, scroll = true, s
                 rscRouter.push(targetPath, { scroll });
             }
         }
-        else {
+        else if (legacyRouter) {
             if (replace) {
                 legacyRouter.replace(targetPath, { scroll });
             }

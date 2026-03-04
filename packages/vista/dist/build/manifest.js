@@ -103,11 +103,29 @@ function generateBuildManifest(vistaDir, buildId, pages = {}) {
     return manifest;
 }
 function toRegexFromPattern(pattern) {
-    const escaped = pattern
-        .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-        .replace(/:([a-zA-Z0-9_]+)\*/g, '(?<$1>.+)')
-        .replace(/:([a-zA-Z0-9_]+)/g, '(?<$1>[^/]+)');
-    return `^${escaped}$`;
+    if (pattern === '/') {
+        return '^/$';
+    }
+    const normalized = pattern.startsWith('/') ? pattern.slice(1) : pattern;
+    const parts = normalized.split('/').filter(Boolean);
+    const regexParts = parts.map((part) => {
+        if (!part.startsWith(':')) {
+            return part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+        const dynamicMatch = /^:([a-zA-Z0-9_]+)(\*)?(\?)?$/.exec(part);
+        if (!dynamicMatch) {
+            return part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+        const [, paramName, isCatchAll, isOptional] = dynamicMatch;
+        if (isCatchAll && isOptional) {
+            return `(?<${paramName}>.*)`;
+        }
+        if (isCatchAll) {
+            return `(?<${paramName}>.+)`;
+        }
+        return `(?<${paramName}>[^/]+)`;
+    });
+    return `^/${regexParts.join('/')}$`;
 }
 function toRouteInfo(route) {
     return {

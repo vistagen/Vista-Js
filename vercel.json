@@ -1,26 +1,8 @@
 {
   "version": 2,
-  "buildCommand": "cd packages/vista && npm install --legacy-peer-deps && cd ../../apps/web && npm install --legacy-peer-deps && npx vista build",
+  "buildCommand": "npm --prefix packages/vista run build && npm --prefix apps/web run build",
   "outputDirectory": "apps/web/.vista",
   "framework": null,
-  "installCommand": "npm install --legacy-peer-deps",
-  "devCommand": "cd apps/web && npm run dev",
-  "routes": [
-    {
-      "src": "/client.js",
-      "dest": "/apps/web/.vista/client.js"
-    },
-    {
-      "src": "/client.css",
-      "dest": "/apps/web/.vista/client.css"
-    },
-    {
-      "src": "/vista-client-manifest.js",
-      "dest": "/apps/web/.vista/vista-client-manifest.js"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/api/handler"
-    }
-  ]
+  "installCommand": "npm --prefix packages/vista install --no-package-lock --include=dev --legacy-peer-deps --no-audit --no-fund && npm --prefix apps/web install --no-package-lock --include=dev --legacy-peer-deps --no-audit --no-fund",
+  "devCommand": "npm --prefix apps/web run dev"
 }

@@ -42,5 +42,19 @@ export const routingOverviewDoc: DocsDocSource = {
       type: 'paragraph',
       text: 'Catch-all routes are useful for docs IA where category + article path comes from content data.',
     },
+    {
+      type: 'links',
+      title: 'Related',
+      links: [
+        {
+          label: 'Dynamic Routes and Slugs',
+          href: '/docs/core-concepts/dynamic-routes-and-slugs',
+        },
+        {
+          label: 'Project File Structure',
+          href: '/docs/reference/project-file-structure',
+        },
+      ],
+    },
   ],
 };

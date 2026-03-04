@@ -55,6 +55,62 @@ function runPostCSS(cwd: string, vistaDir: string): void {
   }
 }
 
+function hasUseClientDirective(filePath: string): boolean {
+  try {
+    const source = fs.readFileSync(filePath, 'utf-8');
+    return /^\s*['"]use client['"]\s*;?/m.test(source);
+  } catch {
+    return false;
+  }
+}
+
+function collectUseClientFiles(dir: string, collected: Set<string>): void {
+  if (!fs.existsSync(dir)) return;
+
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const absolutePath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      collectUseClientFiles(absolutePath, collected);
+      continue;
+    }
+
+    if (!entry.isFile() || !entry.name.endsWith('.js')) {
+      continue;
+    }
+
+    if (hasUseClientDirective(absolutePath)) {
+      collected.add(path.resolve(absolutePath));
+    }
+  }
+}
+
+function resolvePackageRoot(cwd: string, packageName: string): string | null {
+  try {
+    return path.dirname(require.resolve(`${packageName}/package.json`, { paths: [cwd] }));
+  } catch {
+    return null;
+  }
+}
+
+function collectFrameworkClientReferences(cwd: string): string[] {
+  const roots = [resolvePackageRoot(cwd, 'vista'), resolvePackageRoot(cwd, '@vistagenic/vista')].filter(
+    (value): value is string => Boolean(value)
+  );
+
+  if (roots.length === 0) {
+    return [];
+  }
+
+  const collected = new Set<string>();
+  for (const packageRoot of roots) {
+    collectUseClientFiles(path.join(packageRoot, 'dist', 'client'), collected);
+    collectUseClientFiles(path.join(packageRoot, 'dist', 'components'), collected);
+  }
+
+  return Array.from(collected);
+}
+
 /**
  * Generate the RSC-aware client entry file
  */
@@ -277,6 +333,20 @@ export async function buildRSC(watch: boolean = false): Promise<{
     }
   }
 
+  // Include framework-level client boundaries (e.g. vista/link) so external
+  // package client modules resolve in React Flight manifests.
+  const frameworkClientReferences = collectFrameworkClientReferences(cwd);
+  if (frameworkClientReferences.length > 0) {
+    clientReferenceFiles = Array.from(
+      new Set([...clientReferenceFiles, ...frameworkClientReferences])
+    );
+    if (_debug) {
+      console.log(
+        `[Vista JS RSC] Added ${frameworkClientReferences.length} framework client references`
+      );
+    }
+  }
+
   // Generate manifests
   if (_debug) console.log('[vista:build] Generating manifests...');
 
@@ -365,13 +435,34 @@ export async function buildRSC(watch: boolean = false): Promise<{
     const clientCompiler = webpack(clientConfig);
     syncReactServerManifests(vistaDirs.root);
 
-    // Watch for CSS changes
+    // Watch for CSS + source changes that can affect Tailwind output.
     try {
       const chokidar = require('chokidar');
-      chokidar.watch(path.join(cwd, 'app/**/*.css'), { ignoreInitial: true }).on('change', () => {
-        if (_debug) console.log('[Vista JS RSC] CSS changed, rebuilding...');
-        runPostCSS(cwd, vistaDirs.root);
-      });
+      const styleWatchRoots = ['app', 'components', 'content', 'lib', 'ctx', 'data']
+        .map((entry) => path.join(cwd, entry))
+        .filter((entry) => fs.existsSync(entry));
+      let cssTimer: ReturnType<typeof setTimeout> | null = null;
+      const scheduleCSSBuild = () => {
+        if (cssTimer) clearTimeout(cssTimer);
+        cssTimer = setTimeout(() => {
+          if (_debug) console.log('[Vista JS RSC] Style source changed, rebuilding CSS...');
+          runPostCSS(cwd, vistaDirs.root);
+        }, 120);
+      };
+
+      chokidar
+        .watch(styleWatchRoots, {
+          ignoreInitial: true,
+          ignored: (watchedPath: string) =>
+            watchedPath.includes(`${path.sep}node_modules${path.sep}`) ||
+            watchedPath.includes(`${path.sep}.git${path.sep}`) ||
+            watchedPath.includes(`${path.sep}.vista${path.sep}`),
+        })
+        .on('all', (_event: string, changedPath: string) => {
+          if (/\.(?:css|[cm]?[jt]sx?|md|mdx)$/i.test(changedPath)) {
+            scheduleCSSBuild();
+          }
+        });
     } catch (e) {
       // chokidar not installed
     }

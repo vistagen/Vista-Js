@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { Menu, X } from 'lucide-react';
+import Link from 'vista/link';
+import { usePathname } from 'vista/navigation';
 import type { DocsNavigationGroup } from '../../lib/docs';
 import { cn } from '../../lib/utils';
 import DocNavigation from './doc-navigation';
@@ -12,6 +14,12 @@ interface MobileNavigationProps {
 
 export default function MobileNavigation({ navigation }: MobileNavigationProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const pathname = usePathname();
+
+  useEffect(() => {
+    // Ensure the backdrop never persists across route transitions.
+    setIsOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     if (isOpen) {
@@ -45,9 +53,13 @@ export default function MobileNavigation({ navigation }: MobileNavigationProps) 
         )}
       >
         <div className="mb-4 flex items-center justify-between border-b border-zinc-900 pb-3">
-          <a href="/docs" onClick={() => setIsOpen(false)} className="text-sm font-semibold tracking-wide text-zinc-100">
+          <Link
+            href="/docs"
+            onClick={() => setIsOpen(false)}
+            className="text-sm font-semibold tracking-wide text-zinc-100"
+          >
             Vista Docs
-          </a>
+          </Link>
           <button
             type="button"
             onClick={() => setIsOpen(false)}
