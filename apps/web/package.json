@@ -7,27 +7,37 @@
     "start": "vista start"
   },
   "dependencies": {
+    "@content-collections/core": "^0.14.2",
+    "@content-collections/mdx": "^0.2.2",
+    "@mdx-js/react": "^3.1.1",
+    "@swc-node/register": "^1.9.0",
+    "@swc/core": "^1.4.0",
+    "@tailwindcss/postcss": "^4.0.0",
+    "clsx": "^2.1.1",
+    "lenis": "^1.3.17",
+    "lucide-react": "^0.562.0",
+    "postcss": "^8.0.0",
+    "postcss-cli": "^11.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-server-dom-webpack": "^19.0.0",
-    "vista": "file:../../packages/vista",
-    "postcss": "^8.0.0",
-    "postcss-cli": "^11.0.0",
-    "tailwindcss": "^4.0.0",
-    "@tailwindcss/postcss": "^4.0.0",
-    "@swc-node/register": "^1.9.0",
-    "@swc/core": "^1.4.0",
-    "tsx": "^4.7.0",
-    "clsx": "^2.1.1",
+    "rehype-autolink-headings": "^7.1.0",
+    "rehype-pretty-code": "^0.14.3",
+    "rehype-stringify": "^10.0.1",
+    "remark-parse": "^11.0.0",
+    "remark-rehype": "^11.1.2",
+    "shiki": "^4.0.1",
     "tailwind-merge": "^3.4.0",
-    "lucide-react": "^0.562.0",
-    "lenis": "^1.3.17",
-    "react-shaders": "^0.0.4",
-    "webpack": "^5.90.0"
+    "tailwindcss": "^4.0.0",
+    "tsx": "^4.7.0",
+    "unified": "^11.0.5",
+    "vista": "file:../../packages/vista",
+    "webpack": "^5.90.0",
+    "zustand": "^5.0.11"
   },
   "devDependencies": {
-    "typescript": "^5.0.0",
     "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0"
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.0.0"
   }
 }

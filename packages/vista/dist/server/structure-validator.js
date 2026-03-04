@@ -20,7 +20,7 @@ const path_1 = __importDefault(require("path"));
 // ============================================================================
 const FILE_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js'];
 const RESERVED_INTERNAL_SEGMENTS = new Set(['[not-found]']);
-const VALID_SEGMENT_PATTERN = /^[a-zA-Z0-9_\-]+$|^\[\[\.\.\.[\w\-]+\]\]$|^\[[\w\-]+\]$|^\[\.\.\.[\ w\-]+\]$|^\([\w\-]+\)$/;
+const VALID_SEGMENT_PATTERN = /^[a-zA-Z0-9_\-]+$|^\[\[\.\.\.[\w\-]+\]\]$|^\[[\w\-]+\]$|^\[\.\.\.[\w\-]+\]$|^\([\w\-]+\)$/;
 const CONVENTION_FILES = new Set([
     'page',
     'layout',

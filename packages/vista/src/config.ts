@@ -4,6 +4,7 @@ import { ImageConfig } from './image/image-config';
 
 export type ValidationMode = 'strict' | 'warn';
 export type ValidationLogLevel = 'compact' | 'verbose';
+export type TypedApiSerialization = 'json' | 'superjson';
 
 export interface StructureValidationConfig {
   /** Enable structure validation. Default: true */
@@ -18,6 +19,19 @@ export interface StructureValidationConfig {
   watchDebounceMs?: number;
 }
 
+export interface TypedApiExperimentalConfig {
+  /** Enable typed API runtime. Default: false */
+  enabled?: boolean;
+  /** Request/response serialization mode. Default: 'json' */
+  serialization?: TypedApiSerialization;
+  /** Maximum request body size for typed API endpoints in bytes. Default: 1MB */
+  bodySizeLimitBytes?: number;
+}
+
+export interface ExperimentalConfig {
+  typedApi?: TypedApiExperimentalConfig;
+}
+
 export interface VistaConfig {
   images?: ImageConfig;
   // Add other future config options here suitable for user requests
@@ -28,6 +42,7 @@ export interface VistaConfig {
   validation?: {
     structure?: StructureValidationConfig;
   };
+  experimental?: ExperimentalConfig;
 }
 
 export const defaultStructureValidationConfig: Required<StructureValidationConfig> = {
@@ -38,10 +53,19 @@ export const defaultStructureValidationConfig: Required<StructureValidationConfi
   watchDebounceMs: 120,
 };
 
+export const defaultTypedApiConfig: Required<TypedApiExperimentalConfig> = {
+  enabled: false,
+  serialization: 'json',
+  bodySizeLimitBytes: 1024 * 1024,
+};
+
 export const defaultConfig: VistaConfig = {
   images: {},
   validation: {
     structure: { ...defaultStructureValidationConfig },
+  },
+  experimental: {
+    typedApi: { ...defaultTypedApiConfig },
   },
 };
 
@@ -57,6 +81,63 @@ export function resolveStructureValidationConfig(
   };
 }
 
+export type ResolvedTypedApiConfig = Required<TypedApiExperimentalConfig>;
+
+/**
+ * Resolve and sanitize experimental typed API config.
+ */
+export function resolveTypedApiConfig(config: VistaConfig): ResolvedTypedApiConfig {
+  const merged = {
+    ...defaultTypedApiConfig,
+    ...(config.experimental?.typedApi ?? {}),
+  };
+
+  const serialization: TypedApiSerialization =
+    merged.serialization === 'superjson' ? 'superjson' : 'json';
+  const parsedLimit = Number(merged.bodySizeLimitBytes);
+  const bodySizeLimitBytes =
+    Number.isFinite(parsedLimit) && parsedLimit > 0
+      ? Math.floor(parsedLimit)
+      : defaultTypedApiConfig.bodySizeLimitBytes;
+
+  return {
+    enabled: Boolean(merged.enabled),
+    serialization,
+    bodySizeLimitBytes,
+  };
+}
+
+function mergeConfig(userConfig: VistaConfig): VistaConfig {
+  return {
+    ...defaultConfig,
+    ...userConfig,
+    images: {
+      ...(defaultConfig.images ?? {}),
+      ...(userConfig.images ?? {}),
+    },
+    server: {
+      ...(defaultConfig.server ?? {}),
+      ...(userConfig.server ?? {}),
+    },
+    validation: {
+      ...(defaultConfig.validation ?? {}),
+      ...(userConfig.validation ?? {}),
+      structure: {
+        ...defaultStructureValidationConfig,
+        ...(userConfig.validation?.structure ?? {}),
+      },
+    },
+    experimental: {
+      ...(defaultConfig.experimental ?? {}),
+      ...(userConfig.experimental ?? {}),
+      typedApi: {
+        ...defaultTypedApiConfig,
+        ...(userConfig.experimental?.typedApi ?? {}),
+      },
+    },
+  };
+}
+
 export function loadConfig(cwd: string = process.cwd()): VistaConfig {
   const tsPath = path.join(cwd, 'vista.config.ts');
   const jsPath = path.join(cwd, 'vista.config.js');
@@ -65,13 +146,13 @@ export function loadConfig(cwd: string = process.cwd()): VistaConfig {
     if (fs.existsSync(tsPath)) {
       // We assume ts-node is registered by engine or bin
       const mod = require(tsPath);
-      return { ...defaultConfig, ...(mod.default || mod) };
+      return mergeConfig(mod.default || mod);
     } else if (fs.existsSync(jsPath)) {
       const mod = require(jsPath);
-      return { ...defaultConfig, ...(mod.default || mod) };
+      return mergeConfig(mod.default || mod);
     }
   } catch (error) {
     console.error('Error loading vista.config:', error);
   }
-  return defaultConfig;
+  return mergeConfig({});
 }

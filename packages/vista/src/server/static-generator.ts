@@ -22,6 +22,111 @@ import {
   clearRevalidating,
 } from './static-cache';
 
+const CjsModule = require('module');
+
+let staticRuntimeReady = false;
+let reactResolutionInstalled = false;
+let originalResolveFilename: any = null;
+
+function installSingleReactResolution(cwd: string): void {
+  if (reactResolutionInstalled) return;
+
+  let reactPath: string;
+  let reactDomPath: string;
+  try {
+    reactPath = require.resolve('react', { paths: [cwd] });
+    reactDomPath = require.resolve('react-dom', { paths: [cwd] });
+  } catch {
+    try {
+      reactPath = require.resolve('react');
+      reactDomPath = require.resolve('react-dom');
+    } catch {
+      return;
+    }
+  }
+
+  originalResolveFilename = CjsModule._resolveFilename;
+  CjsModule._resolveFilename = function (
+    request: string,
+    parent: unknown,
+    isMain: boolean,
+    options: unknown
+  ) {
+    if (request === 'react') return reactPath;
+    if (request === 'react-dom') return reactDomPath;
+
+    if (request.startsWith('react/')) {
+      const subPath = request.slice('react/'.length);
+      try {
+        return require.resolve(`react/${subPath}`, { paths: [path.dirname(reactPath)] });
+      } catch {
+        // fall through
+      }
+    }
+
+    if (request.startsWith('react-dom/')) {
+      const subPath = request.slice('react-dom/'.length);
+      try {
+        return require.resolve(`react-dom/${subPath}`, { paths: [path.dirname(reactDomPath)] });
+      } catch {
+        // fall through
+      }
+    }
+
+    return originalResolveFilename.call(this, request, parent, isMain, options);
+  };
+
+  reactResolutionInstalled = true;
+}
+
+function setupTypeScriptRuntime(cwd: string): void {
+  try {
+    const swcPath = require.resolve('@swc-node/register', { paths: [cwd] });
+    require(swcPath);
+    return;
+  } catch {
+    // fallback
+  }
+
+  try {
+    const tsNodePath = require.resolve('ts-node', { paths: [cwd] });
+    require(tsNodePath).register({
+      transpileOnly: true,
+      compilerOptions: {
+        module: 'commonjs',
+        jsx: 'react-jsx',
+        moduleResolution: 'node16',
+        esModuleInterop: true,
+      },
+    });
+    return;
+  } catch {
+    // fallback
+  }
+
+  try {
+    require.resolve('tsx', { paths: [cwd] });
+    require('tsx/cjs');
+  } catch {
+    // no transpiler available
+  }
+}
+
+function setupStaticGenerationRuntime(cwd: string): void {
+  if (staticRuntimeReady) return;
+
+  // Ignore CSS imports while requiring app modules for prerender.
+  require.extensions['.css'] = (m: any, filename: string) => {
+    if (filename.endsWith('.module.css')) {
+      m.exports = {};
+    }
+  };
+
+  installSingleReactResolution(cwd);
+  setupTypeScriptRuntime(cwd);
+  staticRuntimeReady = true;
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -62,6 +167,8 @@ async function resolveStaticParams(
   route: RouteEntry,
   cwd: string
 ): Promise<Array<Record<string, string | string[]>>> {
+  setupStaticGenerationRuntime(cwd);
+
   if (!route.hasGenerateStaticParams) {
     return [];
   }
@@ -134,6 +241,8 @@ async function prerenderPage(
   params: Record<string, string | string[]> | undefined,
   cwd: string
 ): Promise<CachedPage | null> {
+  setupStaticGenerationRuntime(cwd);
+
   try {
     const React = require('react');
     const { renderToString } = require('react-dom/server');

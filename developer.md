@@ -1,7 +1,7 @@
 # Vista JS — Complete Developer Guide
 
 > **Version**: 0.1.0  
-> **Last Updated**: March 3, 2026  
+> **Last Updated**: March 4, 2026  
 > **Package**: `@vistagenic/vista`  
 > **Repo**: `https://github.com/vistagen/Vista-Js`  
 > **License**: MIT
@@ -47,6 +47,7 @@ touching any code.
 30. [Known Issues & Gotchas](#30-known-issues--gotchas)
 31. [Deployment](#31-deployment)
 32. [Contributing Checklist](#32-contributing-checklist)
+33. [Typed API (Experimental, Package-First)](#33-typed-api-experimental-package-first)
 
 ---
 
@@ -2044,3 +2045,89 @@ Before submitting a PR:
 
 _This document was generated for the Vista JS development team. Keep it updated
 as the codebase evolves. When in doubt, read the source — the code is the truth._
+
+---
+
+## 33. Typed API (Experimental, Package-First)
+
+### Purpose
+
+Typed API is experimental and **off by default**. It adds:
+
+- Server DSL from `@vistagenic/vista/stack`
+- Typed client from `@vistagenic/vista/stack/client`
+- Optional CLI scaffolding via `vista g ...`
+
+### Public Package APIs
+
+```ts
+import { vstack } from '@vistagenic/vista/stack';
+import { createVistaClient } from '@vistagenic/vista/stack/client';
+```
+
+Server:
+
+- `vstack.init()`
+- `v.procedure`, `v.middleware`, `v.router`, `v.mergeRouters`
+
+Client:
+
+- `createVistaClient<AppRouter>()`
+- `$get`, `$post`, `$url`
+
+### Config
+
+```ts
+const config = {
+  experimental: {
+    typedApi: {
+      enabled: true,
+      serialization: 'json', // 'json' | 'superjson'
+      bodySizeLimitBytes: 1024 * 1024,
+    },
+  },
+};
+```
+
+### Runtime Bridge Behavior
+
+Both engines (`engine.ts`, `rsc-engine.ts`) follow:
+
+1. Check legacy `app/api/*` route first
+2. If no legacy file, fallback to typed API router
+3. Typed API runs only when `experimental.typedApi.enabled === true`
+
+This preserves backward compatibility for existing API routes.
+
+### CLI Convenience (Optional)
+
+Generators:
+
+```bash
+vista g api-init
+vista g router users
+vista g procedure create-user post
+```
+
+New app starter:
+
+```bash
+npx create-vista-app@latest my-app --typed-api
+```
+
+### Migration Path
+
+1. Enable typed API flag in `vista.config.ts`
+2. Scaffold starter files with `vista g api-init`
+3. Move one legacy route at a time into typed router/procedure files
+4. Keep legacy routes as fallback during migration
+
+### Rollback Path
+
+Immediate rollback:
+
+```ts
+experimental: { typedApi: { enabled: false } }
+```
+
+With rollback off, typed routes stop serving requests and legacy `app/api/*` behavior remains unchanged.

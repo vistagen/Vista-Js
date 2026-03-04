@@ -39,6 +39,44 @@ cd my-app
 npm run dev
 ```
 
+To create a project with the experimental typed API starter:
+
+```bash
+npx create-vista-app@latest my-app --typed-api
+cd my-app
+npm run dev
+```
+
+## 🧪 Experimental Typed API (Package-First)
+
+Vista now includes an experimental typed API layer designed as package APIs first:
+
+- `@vistagenic/vista/stack` for server router/procedure DSL
+- `@vistagenic/vista/stack/client` for typed client calls
+- CLI generators are convenience only (`vista g ...`)
+
+Enable it in `vista.config.ts`:
+
+```ts
+const config = {
+  experimental: {
+    typedApi: {
+      enabled: true,
+      serialization: 'json', // or 'superjson'
+      bodySizeLimitBytes: 1048576,
+    },
+  },
+};
+
+export default config;
+```
+
+Rollback is immediate by setting:
+
+```ts
+experimental: { typedApi: { enabled: false } }
+```
+
 ## 🤝 Contributing
 
 We welcome contributions! Please see our [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to get started.

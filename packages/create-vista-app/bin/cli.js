@@ -16,22 +16,27 @@ function detectPackageManager() {
 }
 
 const pkgManager = detectPackageManager();
+const rawArgs = process.argv.slice(2);
+const useTypedApiStarter = rawArgs.includes('--typed-api') || rawArgs.includes('--typed');
+const skipInstall = rawArgs.includes('--skip-install');
+const skipGit = rawArgs.includes('--no-git');
 
 if (process.argv.includes('--help') || process.argv.includes('-h')) {
   console.log(`
 Usage:
-  ${usageCommand}
+  ${usageCommand} [--typed-api] [--skip-install] [--no-git]
 
 Example:
   npx create-vista-app@latest my-vista-app
+  npx create-vista-app@latest my-vista-app --typed-api
 `);
   process.exit(0);
 }
 
 // Simple args: npx create-vista-app@latest <project-name>
-const args = process.argv.slice(2).filter((arg) => !arg.startsWith('-'));
+const args = rawArgs.filter((arg) => !arg.startsWith('-'));
 const projectName = args[0] || 'my-vista-app';
-const useLocal = process.argv.includes('--local');
+const useLocal = rawArgs.includes('--local');
 const currentDir = process.cwd();
 const projectDir = path.join(currentDir, projectName);
 
@@ -62,6 +67,12 @@ function copyRecursiveSync(src, dest) {
 }
 
 copyRecursiveSync(templateDir, projectDir);
+
+if (useTypedApiStarter) {
+  const typedTemplateDir = path.join(__dirname, '../template-typed');
+  copyRecursiveSync(typedTemplateDir, projectDir);
+  console.log('Added typed API starter files.');
+}
 
 console.log('Scaffolding complete.');
 
@@ -152,36 +163,44 @@ fs.writeFileSync(path.join(projectDir, '.gitignore'), gitignoreContent);
 console.log('Created .gitignore');
 
 // 5. Initialize Git Repository
-try {
-  execSync('git init', { cwd: projectDir, stdio: 'pipe' });
-  execSync('git add .', { cwd: projectDir, stdio: 'pipe' });
-  execSync('git commit -m "Initial commit from create-vista-app"', {
-    cwd: projectDir,
-    stdio: 'pipe',
-    env: {
-      ...process.env,
-      GIT_AUTHOR_NAME: 'Vista',
-      GIT_AUTHOR_EMAIL: 'vista@example.com',
-      GIT_COMMITTER_NAME: 'Vista',
-      GIT_COMMITTER_EMAIL: 'vista@example.com',
-    },
-  });
-  console.log('Initialized git repository with initial commit');
-} catch (e) {
-  // Git might not be installed, that's okay
-  console.log('Note: Could not initialize git repository. You can do this manually with: git init');
+if (!skipGit) {
+  try {
+    execSync('git init', { cwd: projectDir, stdio: 'pipe' });
+    execSync('git add .', { cwd: projectDir, stdio: 'pipe' });
+    execSync('git commit -m "Initial commit from create-vista-app"', {
+      cwd: projectDir,
+      stdio: 'pipe',
+      env: {
+        ...process.env,
+        GIT_AUTHOR_NAME: 'Vista',
+        GIT_AUTHOR_EMAIL: 'vista@example.com',
+        GIT_COMMITTER_NAME: 'Vista',
+        GIT_COMMITTER_EMAIL: 'vista@example.com',
+      },
+    });
+    console.log('Initialized git repository with initial commit');
+  } catch (e) {
+    // Git might not be installed, that's okay
+    console.log('Note: Could not initialize git repository. You can do this manually with: git init');
+  }
+} else {
+  console.log('Skipped git initialization (--no-git).');
 }
 
 // 6. Install Dependencies
 const installCmd = pkgManager === 'yarn' ? 'yarn' : `${pkgManager} install`;
-console.log(`\nInstalling dependencies with ${pkgManager}... This may take a moment.\n`);
-try {
-  execSync(installCmd, { cwd: projectDir, stdio: 'inherit' });
-  console.log(`\n✓ Dependencies installed successfully!`);
-} catch (e) {
-  console.log(
-    `\nNote: Could not install dependencies automatically. Run "${installCmd}" manually.`
-  );
+if (!skipInstall) {
+  console.log(`\nInstalling dependencies with ${pkgManager}... This may take a moment.\n`);
+  try {
+    execSync(installCmd, { cwd: projectDir, stdio: 'inherit' });
+    console.log(`\n✓ Dependencies installed successfully!`);
+  } catch (e) {
+    console.log(
+      `\nNote: Could not install dependencies automatically. Run "${installCmd}" manually.`
+    );
+  }
+} else {
+  console.log('\nSkipped dependency installation (--skip-install).');
 }
 
 const runCmd = pkgManager === 'npm' ? 'npm run' : pkgManager;

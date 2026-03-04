@@ -98,7 +98,7 @@ type FlightSSRClient = {
 
 type Thenable<T> = Promise<T> & { status?: string; value?: T };
 
-import { loadConfig, resolveStructureValidationConfig } from '../config';
+import { loadConfig, resolveStructureValidationConfig, resolveTypedApiConfig } from '../config';
 import { ErrorOverlay, renderErrorHTML } from '../dev-error';
 import type { RouteEntry, ServerManifest } from '../build/rsc/server-manifest';
 import { assertVistaArtifacts } from './artifact-validator';
@@ -114,6 +114,11 @@ import {
 } from './structure-log';
 import { RouteErrorBoundary } from '../components/error-boundary';
 import { RouteSuspense } from '../components/route-suspense';
+import {
+  resolveLegacyApiRoutePath,
+  runLegacyApiRoute,
+  runTypedApiRoute,
+} from './typed-api-runtime';
 
 // Support CSS imports on server runtime
 // - Regular .css: ignored (handled by PostCSS)
@@ -545,61 +550,33 @@ async function handleApiRoute(
   req: express.Request,
   res: express.Response,
   cwd: string,
-  isDev: boolean
+  isDev: boolean,
+  typedApiConfig: ReturnType<typeof resolveTypedApiConfig>
 ): Promise<void> {
-  const apiRoute = req.path.substring(5);
-  const routeTsPath = path.resolve(cwd, 'app', 'api', apiRoute, 'route.ts');
-  const routeTsxPath = path.resolve(cwd, 'app', 'api', apiRoute, 'route.tsx');
-  const legacyPath = path.resolve(cwd, 'app', 'api', `${apiRoute}.ts`);
-
-  let apiPath: string | null = null;
-  if (fs.existsSync(routeTsPath)) apiPath = routeTsPath;
-  else if (fs.existsSync(routeTsxPath)) apiPath = routeTsxPath;
-  else if (fs.existsSync(legacyPath)) apiPath = legacyPath;
-
-  if (!apiPath) {
-    res.status(404).json({ error: 'API Route Not Found' });
-    return;
-  }
-
   try {
-    if (isDev) delete require.cache[require.resolve(apiPath)];
-    const apiModule = require(apiPath);
-
-    const method = req.method?.toUpperCase() || 'GET';
-    const methodHandler = apiModule[method];
-
-    if (typeof methodHandler === 'function') {
-      const request = {
-        url: req.protocol + '://' + req.get('host') + req.originalUrl,
-        method: req.method,
-        headers: new Map(Object.entries(req.headers)),
-        json: async () => req.body,
-        text: async () => JSON.stringify(req.body),
-        nextUrl: {
-          pathname: req.path,
-          searchParams: new URLSearchParams(req.query as any),
-        },
-      };
-
-      const result = await methodHandler(request, { params: {} });
-      if (result && typeof result.json === 'function') {
-        const json = await result.json();
-        res.status(result.status || 200).json(json);
-      } else if (result) {
-        res.status(200).json(result);
-      } else {
-        res.status(204).end();
-      }
+    const legacyApiPath = resolveLegacyApiRoutePath(cwd, req.path);
+    if (legacyApiPath) {
+      await runLegacyApiRoute({
+        req,
+        res,
+        apiPath: legacyApiPath,
+        isDev,
+      });
       return;
     }
 
-    if (typeof apiModule.default === 'function') {
-      apiModule.default(req, res);
+    const typedHandled = await runTypedApiRoute({
+      req,
+      res,
+      cwd,
+      isDev,
+      config: typedApiConfig,
+    });
+    if (typedHandled) {
       return;
     }
 
-    res.status(405).json({ error: `Method ${method} not allowed` });
+    res.status(404).json({ error: 'API Route Not Found' });
   } catch (error) {
     console.error('[vista:rsc] API route error:', error);
     res.status(500).json({ error: 'Internal Server Error' });
@@ -812,6 +789,7 @@ export function startRSCServer(options: RSCEngineOptions = {}): void {
   const cwd = process.cwd();
   const isDev = process.env.NODE_ENV !== 'production';
   const vistaConfig = loadConfig(cwd);
+  const typedApiConfig = resolveTypedApiConfig(vistaConfig);
 
   // Clean stale hot-update files from previous runs
   cleanHotUpdateFiles(cwd);
@@ -1294,7 +1272,7 @@ export function startRSCServer(options: RSCEngineOptions = {}): void {
     }
 
     if (req.path.startsWith('/api/')) {
-      await handleApiRoute(req, res, cwd, isDev);
+      await handleApiRoute(req, res, cwd, isDev, typedApiConfig);
       return;
     }
 
