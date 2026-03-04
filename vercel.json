@@ -3,6 +3,6 @@
   "buildCommand": "npm --prefix apps/web run build",
   "outputDirectory": "apps/web/.vista",
   "framework": null,
-  "installCommand": "npm --prefix apps/web install --no-package-lock --include=dev --legacy-peer-deps --no-audit --no-fund",
+  "installCommand": "npm --prefix packages/vista install --no-package-lock --include=dev --legacy-peer-deps --no-audit --no-fund && npm --prefix apps/web install --no-package-lock --include=dev --legacy-peer-deps --no-audit --no-fund",
   "devCommand": "npm --prefix apps/web run dev"
 }
