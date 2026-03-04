@@ -4,5 +4,19 @@
   "outputDirectory": "apps/web/.vista",
   "framework": null,
   "installCommand": "npm --prefix packages/vista install --no-package-lock --include=dev --legacy-peer-deps --no-audit --no-fund && npm --prefix apps/web install --no-package-lock --include=dev --legacy-peer-deps --no-audit --no-fund",
-  "devCommand": "npm --prefix apps/web run dev"
+  "devCommand": "npm --prefix apps/web run dev",
+  "routes": [
+    {
+      "src": "^/$",
+      "dest": "/static/pages/index.html"
+    },
+    {
+      "src": "^/docs/?$",
+      "dest": "/static/pages/docs.html"
+    },
+    {
+      "src": "^/docs/.+$",
+      "dest": "/static/pages/docs.html"
+    }
+  ]
 }
