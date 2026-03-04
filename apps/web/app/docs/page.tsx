@@ -28,6 +28,7 @@ export default function DocsPage() {
         <div className="mt-7 flex flex-wrap gap-3">
           <Link
             href={primaryCtaHref}
+            prefetch={true}
             className="rounded-full border border-primary/40 bg-primary/10 px-5 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/15"
           >
             Start with First Steps
@@ -35,6 +36,7 @@ export default function DocsPage() {
           {typedApiDoc ? (
             <Link
               href={getDocPath(typedApiDoc)}
+              prefetch={true}
               className="rounded-full border border-zinc-700 bg-zinc-900/70 px-5 py-2 text-sm font-medium text-zinc-200 transition-colors hover:border-zinc-600 hover:bg-zinc-900"
             >
               Typed API Quickstart
