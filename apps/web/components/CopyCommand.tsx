@@ -8,13 +8,44 @@ export default function CopyCommand() {
     const [copied, setCopied] = useState(false);
     const command = CREATE_VISTA_APP_COMMAND;
 
-    const handleCopy = async () => {
+    const copyWithFallback = async (text: string): Promise<boolean> => {
+        if (typeof window === 'undefined') return false;
+
+        if (navigator?.clipboard?.writeText) {
+            try {
+                await navigator.clipboard.writeText(text);
+                return true;
+            } catch {
+                // Fallback to legacy copy path below
+            }
+        }
+
         try {
-            await navigator.clipboard.writeText(command);
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.setAttribute('readonly', '');
+            textarea.style.position = 'fixed';
+            textarea.style.top = '-9999px';
+            textarea.style.left = '-9999px';
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+            textarea.setSelectionRange(0, text.length);
+            const successful = document.execCommand('copy');
+            document.body.removeChild(textarea);
+            return successful;
+        } catch {
+            return false;
+        }
+    };
+
+    const handleCopy = async () => {
+        const didCopy = await copyWithFallback(command);
+        if (didCopy) {
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
-        } catch (err) {
-            console.error('Failed to copy!', err);
+        } else {
+            console.error('Failed to copy command to clipboard.');
         }
     };
 
