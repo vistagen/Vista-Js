@@ -21,9 +21,8 @@ export default function DocsPage() {
           Build Fast. Write Less. Ship with Control.
         </h1>
         <p className="mt-4 max-w-3xl text-lg leading-8 text-zinc-300">
-          Vista docs are organized using dynamic category-slug routes:{' '}
-          <code>/docs/&lt;category&gt;/&lt;slug&gt;</code>. This keeps URLs stable while your
-          content grows from basics to advanced runtime
+          Start from the basics, understand how Vista works, and move toward real production
+          patterns with clear guides, practical examples, and ready-to-use code snippets.
         </p>
 
         <div className="mt-7 flex flex-wrap gap-3">
