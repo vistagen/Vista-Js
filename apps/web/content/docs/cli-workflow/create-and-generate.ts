@@ -49,7 +49,7 @@ npm run dev`,
       title: 'Related',
       links: [
         { label: 'Project Structure', href: '/docs/getting-started/project-structure' },
-        { label: 'Package Publishing', href: '/docs/deployment/package-publishing' },
+        { label: 'Render Deployment (Recommended)', href: '/docs/deployment/render-deployment' },
       ],
     },
   ],

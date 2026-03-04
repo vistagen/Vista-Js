@@ -4,7 +4,8 @@ import { apiRoutesVsTypedApiDoc } from './core-concepts/api-routes-vs-typed-api'
 import { dynamicRoutesAndSlugsDoc } from './core-concepts/dynamic-routes-and-slugs';
 import { routingOverviewDoc } from './core-concepts/routing-overview';
 import { typedApiRuntimeFlowDoc } from './core-concepts/typed-api-runtime-flow';
-import { packagePublishingDoc } from './deployment/package-publishing';
+import { renderDeploymentDoc } from './deployment/render-deployment';
+import { vercelDeploymentDoc } from './deployment/vercel-deployment';
 import { firstStepsDoc } from './getting-started/first-steps';
 import { projectStructureDoc } from './getting-started/project-structure';
 import { typedApiQuickstartDoc } from './getting-started/typed-api-quickstart';
@@ -61,7 +62,8 @@ const docsSource: DocsDocSource[] = [
   vistaConfigReferenceDoc,
   projectFileStructureDoc,
   typedClientReferenceDoc,
-  packagePublishingDoc,
+  renderDeploymentDoc,
+  vercelDeploymentDoc,
 ];
 
 export const allDocs: CollectedDoc[] = docsSource.map((doc) => ({
