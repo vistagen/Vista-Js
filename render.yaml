@@ -8,9 +8,7 @@ services:
     region: oregon
     plan: free
     buildCommand: |
-      npm --prefix packages/vista install --no-package-lock --include=dev --no-audit --no-fund
       npm --prefix apps/web install --no-package-lock --include=dev --no-audit --no-fund
-      npm --prefix packages/vista run build
       npm --prefix apps/web run build
     startCommand: npm --prefix apps/web run start
     envVars:

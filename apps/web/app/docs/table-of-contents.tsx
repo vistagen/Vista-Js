@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlignLeft, ChevronDown, X } from 'lucide-react';
 import { usePathname } from 'vista/navigation';
 import { cn } from '../../lib/utils';
@@ -24,11 +24,75 @@ export default function TableOfContents({ mode = 'desktop' }: TableOfContentsPro
   const setAllHeadings = useTableOfContents((state) => state.setAllHeadings);
   const activeId = visibleSections[0] || '';
   const [isOpen, setIsOpen] = useState(false);
+  const lockedBodyRef = useRef<{
+    scrollY: number;
+    overflow: string;
+    position: string;
+    top: string;
+    left: string;
+    right: string;
+    width: string;
+  } | null>(null);
 
   useEffect(() => {
     // Prevent stale mobile drawer overlay when navigating between docs routes.
     setIsOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    const bodyStyle = document.body.style;
+
+    if (isOpen) {
+      if (!lockedBodyRef.current) {
+        lockedBodyRef.current = {
+          scrollY: window.scrollY,
+          overflow: bodyStyle.overflow,
+          position: bodyStyle.position,
+          top: bodyStyle.top,
+          left: bodyStyle.left,
+          right: bodyStyle.right,
+          width: bodyStyle.width,
+        };
+      }
+
+      bodyStyle.overflow = 'hidden';
+      bodyStyle.position = 'fixed';
+      bodyStyle.top = `-${lockedBodyRef.current.scrollY}px`;
+      bodyStyle.left = '0';
+      bodyStyle.right = '0';
+      bodyStyle.width = '100%';
+      return;
+    }
+
+    if (lockedBodyRef.current) {
+      const { scrollY, overflow, position, top, left, right, width } = lockedBodyRef.current;
+      bodyStyle.overflow = overflow;
+      bodyStyle.position = position;
+      bodyStyle.top = top;
+      bodyStyle.left = left;
+      bodyStyle.right = right;
+      bodyStyle.width = width;
+      window.scrollTo({ top: scrollY });
+      lockedBodyRef.current = null;
+    }
+  }, [isOpen]);
+
+  useEffect(
+    () => () => {
+      if (!lockedBodyRef.current) return;
+      const bodyStyle = document.body.style;
+      const { scrollY, overflow, position, top, left, right, width } = lockedBodyRef.current;
+      bodyStyle.overflow = overflow;
+      bodyStyle.position = position;
+      bodyStyle.top = top;
+      bodyStyle.left = left;
+      bodyStyle.right = right;
+      bodyStyle.width = width;
+      window.scrollTo({ top: scrollY });
+      lockedBodyRef.current = null;
+    },
+    []
+  );
 
   useEffect(() => {
     const parts = pathname.split('/').filter(Boolean);
@@ -85,9 +149,11 @@ export default function TableOfContents({ mode = 'desktop' }: TableOfContentsPro
         {isOpen ? <button className="fixed inset-0 z-50 bg-black/70 xl:hidden" onClick={() => setIsOpen(false)} /> : null}
 
         <aside
+          data-lenis-prevent
+          aria-hidden={!isOpen}
           className={cn(
-            'fixed inset-y-0 right-0 z-[60] w-[86%] max-w-xs border-l border-zinc-800 bg-black p-4 transition-transform xl:hidden',
-            isOpen ? 'translate-x-0' : 'translate-x-full'
+            'fixed inset-y-0 right-0 z-[60] w-[86%] max-w-xs overflow-y-auto overscroll-contain border-l border-zinc-800 bg-black p-4 transition-transform touch-pan-y [-webkit-overflow-scrolling:touch] xl:hidden',
+            isOpen ? 'translate-x-0 pointer-events-auto' : 'translate-x-full pointer-events-none'
           )}
         >
           <div className="mb-4 flex items-center justify-between border-b border-zinc-900 pb-3">
