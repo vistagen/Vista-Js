@@ -1,34 +1,34 @@
 export const features = [
     {
-        title: "Zero-Config Optimizations",
-        description: "Vista handles the heavy lifting. Performance optimizations for assets and scripts are baked in, so you can focus on code."
-    },
-    {
-        title: "Instant Streaming",
-        description: "Stop waiting for hydration. Vista streams UI chunks instantly from the server, making your app feel alive immediately."
+        title: "File-System Routing",
+        description: "Static, dynamic, and catch-all routes work from your folder structure with nested layouts baked in."
     },
     {
         title: "React Server Components",
-        description: "Modern by default. Build your UI on the server to keep your client bundle small and your secrets secure."
+        description: "Server-first rendering keeps client bundles lean while preserving component-driven DX."
     },
     {
-        title: "Universal Data Access",
-        description: "Forget complex data layers. Fetch with standard async/await anywhere in your tree, server or client side."
+        title: "Streaming SSR",
+        description: "Progressive HTML streaming improves first paint and keeps UI responsive on slower networks."
     },
     {
-        title: "Tailwind Native",
-        description: "Styling shouldn't be a chore. Tailwind CSS is pre-configured and ready to go from the first command."
+        title: "Typed API (Experimental)",
+        description: "Package-first typed procedures and routers are being integrated behind a safe feature flag."
     },
     {
-        title: "Hybrid Rendering",
-        description: "The best of both worlds. Server-side performance meets client-side interactivity without the complexity."
+        title: "Docs IA with Slug Routing",
+        description: "Official docs now use category + slug routes with left nav, right TOC, and article-level signatures."
     },
     {
-        title: "Nested Layouts",
-        description: "Organize complex UIs effortlessly. File-system routing means layouts compose naturally as you build your folder structure."
+        title: "Built-in Dev Runtime",
+        description: "Fast rebuild loop, server/client manifests, and runtime guards are tuned for framework development."
     },
     {
-        title: "Server Actions",
-        description: "Mutations made simple. Call server functions directly from your components to handle form submissions and data updates."
+        title: "CLI + Scaffolding",
+        description: "Create apps quickly, then layer advanced features without forcing CLI lock-in at runtime."
+    },
+    {
+        title: "Deployable by Default",
+        description: "Works with containers and managed platforms while keeping app/runtime boundaries explicit."
     }
 ];

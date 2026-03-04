@@ -8,7 +8,7 @@ services:
     region: oregon
     plan: free
     buildCommand: |
-      cd packages/vista && NODE_ENV=development npm install --legacy-peer-deps && cd ../../apps/web && rm -f package-lock.json && NODE_ENV=development npm install --legacy-peer-deps && npx tsx ../../packages/vista/bin/vista.js build
+      cd packages/vista && NODE_ENV=development npm install --ignore-scripts --no-audit --no-fund && cd ../../apps/web && NODE_ENV=development npm install --no-audit --no-fund && npx tsx ../../packages/vista/bin/vista.js build
     startCommand: cd apps/web && npx tsx ../../packages/vista/bin/vista.js start
     envVars:
       - key: NODE_ENV

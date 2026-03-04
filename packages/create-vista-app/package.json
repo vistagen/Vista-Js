@@ -1,6 +1,6 @@
 {
   "name": "create-vista-app",
-  "version": "0.2.1",
+  "version": "0.2.3",
   "description": "Create Vista applications with one command",
   "bin": {
     "create-vista-app": "./bin/cli.js"
@@ -21,12 +21,13 @@
   ],
   "files": [
     "bin",
-    "template"
+    "template",
+    "template-typed"
   ],
   "dependencies": {
     "fs-extra": "^11.1.1",
-    "prompts": "^2.4.2",
-    "picocolors": "^1.0.0"
+    "picocolors": "^1.0.0",
+    "prompts": "^2.4.2"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",

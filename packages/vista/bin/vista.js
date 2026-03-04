@@ -3,6 +3,14 @@
 const command = process.argv[2];
 const flags = process.argv.slice(3);
 
+if (command === 'g' || command === 'generate') {
+  const { runGenerateCommand } = require('../dist/bin/generate');
+  runGenerateCommand(flags).then((code) => {
+    if (code !== 0) process.exit(code);
+  });
+  return;
+}
+
 // RSC is the default mode (like Next.js App Router)
 // Use --legacy to fall back to traditional SSR mode
 const useLegacy = flags.includes('--legacy') || process.env.VISTA_LEGACY === 'true';
@@ -88,6 +96,7 @@ if (command === 'dev') {
   console.log('  dev     Start development server with HMR');
   console.log('  build   Create production build');
   console.log('  start   Start production server');
+  console.log('  g       Generate typed API scaffolds (api-init, router, procedure)');
   console.log('');
   console.log('Options:');
   console.log('  --legacy   Use traditional SSR mode (instead of RSC)');
@@ -96,5 +105,6 @@ if (command === 'dev') {
   console.log('  vista dev            # Start dev server (RSC mode)');
   console.log('  vista dev --legacy   # Start dev server with legacy SSR');
   console.log('  vista build          # Production build with RSC');
+  console.log('  vista g api-init     # Generate typed API starter files');
   console.log('');
 }

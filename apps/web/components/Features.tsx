@@ -1,29 +1,13 @@
-'use client';
-
-import { useState, useEffect } from 'react';
-import { SingularityShaders } from './ui/SingularityShaders';
 import { features } from '../data/features';
 
 export default function Features() {
-    const [isVisible, setIsVisible] = useState(false);
-
-    useEffect(() => {
-        setIsVisible(true);
-    }, []);
-
     return (
         <section className="min-h-screen flex flex-col justify-center py-24 px-4 w-full relative overflow-hidden">
-            {/* Black Hole Shader Background - Left Side */}
-            <div
-                className={`absolute top-1/2 -left-[600px] -translate-y-1/2 w-[2000px] h-[2000px] pointer-events-none z-0 transition-opacity duration-[2000ms] ease-in-out ${isVisible ? 'opacity-30' : 'opacity-0'
-                    }`}
-            >
-                <SingularityShaders size={0.4} />
-            </div>
+            <div className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(ellipse_at_top_left,rgba(255,106,0,0.14),transparent_45%),radial-gradient(ellipse_at_bottom_right,rgba(255,106,0,0.08),transparent_40%)]" />
 
             <div className="max-w-7xl mx-auto relative z-10">
                 <h2 className="text-3xl md:text-5xl font-normal mb-16 text-center tracking-tight">
-                    What's in Vista?
+                    What ships in Vista now
                 </h2>
 
                 {/* Dashed Grid Mesh */}

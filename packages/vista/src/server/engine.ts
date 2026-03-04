@@ -16,7 +16,7 @@ import {
   BUILD_DIR,
 } from '../constants';
 import { RouterProvider } from '../index';
-import { loadConfig, resolveStructureValidationConfig } from '../config';
+import { loadConfig, resolveStructureValidationConfig, resolveTypedApiConfig } from '../config';
 import { ErrorOverlay, renderErrorHTML } from '../dev-error';
 import { assertVistaArtifacts } from './artifact-validator';
 import {
@@ -33,6 +33,11 @@ import { getCachedPage, loadStaticPagesFromDisk, isRevalidating } from './static
 import { revalidatePath } from './static-generator';
 import { getAllFontHTML as getFontHeadHTML } from '../font/registry';
 import { getStyledNotFoundHTML } from './not-found-page';
+import {
+  resolveLegacyApiRoutePath,
+  runLegacyApiRoute,
+  runTypedApiRoute,
+} from './typed-api-runtime';
 import {
   printServerReady,
   requestLogger,
@@ -233,6 +238,7 @@ export function startServer(port: number = 3003, compiler?: webpack.Compiler) {
   const app = express();
   const cwd = process.cwd();
   const vistaConfig = loadConfig(cwd);
+  const typedApiConfig = resolveTypedApiConfig(vistaConfig);
   const isDev = process.env.NODE_ENV !== 'production';
   const appDir = path.join(cwd, 'app');
 
@@ -497,74 +503,37 @@ export function startServer(port: number = 3003, compiler?: webpack.Compiler) {
 
     // API ROUTES SUPPORT - Next.js App Router Style
     if (req.path.startsWith('/api/')) {
-      // Remove /api/ prefix and check for route.ts file
-      const apiRoute = req.path.substring(5); // Remove '/api/'
+      const legacyApiPath = resolveLegacyApiRoutePath(cwd, req.path);
 
-      // Try route.ts pattern first (Next.js App Router style)
-      const routeTsPath = path.resolve(cwd, 'app', 'api', apiRoute, 'route.ts');
-      const routeTsxPath = path.resolve(cwd, 'app', 'api', apiRoute, 'route.tsx');
-
-      // Fallback to old pattern (api/path.ts)
-      const legacyPath = path.resolve(cwd, 'app', 'api', apiRoute + '.ts');
-
-      let apiPath = null;
-      if (fs.existsSync(routeTsPath)) {
-        apiPath = routeTsPath;
-      } else if (fs.existsSync(routeTsxPath)) {
-        apiPath = routeTsxPath;
-      } else if (fs.existsSync(legacyPath)) {
-        apiPath = legacyPath;
-      }
-
-      if (apiPath) {
+      if (legacyApiPath) {
         try {
-          delete require.cache[require.resolve(apiPath)];
-          const apiModule = require(apiPath);
-
-          // Next.js App Router style: named exports for HTTP methods
-          const method = req.method?.toUpperCase() || 'GET';
-          const methodHandler = apiModule[method];
-
-          if (typeof methodHandler === 'function') {
-            // Create Request-like object for App Router compatibility
-            const request = {
-              url: req.protocol + '://' + req.get('host') + req.originalUrl,
-              method: req.method,
-              headers: new Map(Object.entries(req.headers)),
-              json: async () => req.body,
-              text: async () => JSON.stringify(req.body),
-              nextUrl: {
-                pathname: req.path,
-                searchParams: new URLSearchParams(req.query as any),
-              },
-            };
-
-            const result = await methodHandler(request, { params: {} });
-
-            // Handle Response object
-            if (result && typeof result.json === 'function') {
-              const json = await result.json();
-              return res.status(result.status || 200).json(json);
-            } else if (result) {
-              return res.status(200).json(result);
-            }
-            return res.status(204).end();
-          }
-
-          // Fallback to default export (Pages Router style)
-          const handler = apiModule.default;
-          if (typeof handler === 'function') {
-            return handler(req, res);
-          }
-
-          return res.status(405).json({ error: `Method ${method} not allowed` });
-        } catch (err) {
-          console.error(`[vista:ssr] API route error: ${(err as Error)?.message ?? String(err)}`);
+          await runLegacyApiRoute({
+            req,
+            res,
+            apiPath: legacyApiPath,
+            isDev,
+          });
+          return;
+        } catch (error) {
+          console.error(
+            `[vista:ssr] API route error: ${(error as Error)?.message ?? String(error)}`
+          );
           return res.status(500).json({ error: 'Internal Server Error in API' });
         }
-      } else {
-        return res.status(404).json({ error: 'API Route Not Found' });
       }
+
+      const typedHandled = await runTypedApiRoute({
+        req,
+        res,
+        cwd,
+        isDev,
+        config: typedApiConfig,
+      });
+      if (typedHandled) {
+        return;
+      }
+
+      return res.status(404).json({ error: 'API Route Not Found' });
     }
 
     // ==================================================================

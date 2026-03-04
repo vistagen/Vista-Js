@@ -17,6 +17,102 @@ exports.revalidatePath = revalidatePath;
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const static_cache_1 = require("./static-cache");
+const CjsModule = require('module');
+let staticRuntimeReady = false;
+let reactResolutionInstalled = false;
+let originalResolveFilename = null;
+function installSingleReactResolution(cwd) {
+    if (reactResolutionInstalled)
+        return;
+    let reactPath;
+    let reactDomPath;
+    try {
+        reactPath = require.resolve('react', { paths: [cwd] });
+        reactDomPath = require.resolve('react-dom', { paths: [cwd] });
+    }
+    catch {
+        try {
+            reactPath = require.resolve('react');
+            reactDomPath = require.resolve('react-dom');
+        }
+        catch {
+            return;
+        }
+    }
+    originalResolveFilename = CjsModule._resolveFilename;
+    CjsModule._resolveFilename = function (request, parent, isMain, options) {
+        if (request === 'react')
+            return reactPath;
+        if (request === 'react-dom')
+            return reactDomPath;
+        if (request.startsWith('react/')) {
+            const subPath = request.slice('react/'.length);
+            try {
+                return require.resolve(`react/${subPath}`, { paths: [path_1.default.dirname(reactPath)] });
+            }
+            catch {
+                // fall through
+            }
+        }
+        if (request.startsWith('react-dom/')) {
+            const subPath = request.slice('react-dom/'.length);
+            try {
+                return require.resolve(`react-dom/${subPath}`, { paths: [path_1.default.dirname(reactDomPath)] });
+            }
+            catch {
+                // fall through
+            }
+        }
+        return originalResolveFilename.call(this, request, parent, isMain, options);
+    };
+    reactResolutionInstalled = true;
+}
+function setupTypeScriptRuntime(cwd) {
+    try {
+        const swcPath = require.resolve('@swc-node/register', { paths: [cwd] });
+        require(swcPath);
+        return;
+    }
+    catch {
+        // fallback
+    }
+    try {
+        const tsNodePath = require.resolve('ts-node', { paths: [cwd] });
+        require(tsNodePath).register({
+            transpileOnly: true,
+            compilerOptions: {
+                module: 'commonjs',
+                jsx: 'react-jsx',
+                moduleResolution: 'node16',
+                esModuleInterop: true,
+            },
+        });
+        return;
+    }
+    catch {
+        // fallback
+    }
+    try {
+        require.resolve('tsx', { paths: [cwd] });
+        require('tsx/cjs');
+    }
+    catch {
+        // no transpiler available
+    }
+}
+function setupStaticGenerationRuntime(cwd) {
+    if (staticRuntimeReady)
+        return;
+    // Ignore CSS imports while requiring app modules for prerender.
+    require.extensions['.css'] = (m, filename) => {
+        if (filename.endsWith('.module.css')) {
+            m.exports = {};
+        }
+    };
+    installSingleReactResolution(cwd);
+    setupTypeScriptRuntime(cwd);
+    staticRuntimeReady = true;
+}
 // ---------------------------------------------------------------------------
 // Static param expansion
 // ---------------------------------------------------------------------------
@@ -25,6 +121,7 @@ const static_cache_1 = require("./static-cache");
  * and return the list of param sets.
  */
 async function resolveStaticParams(route, cwd) {
+    setupStaticGenerationRuntime(cwd);
     if (!route.hasGenerateStaticParams) {
         return [];
     }
@@ -80,6 +177,7 @@ function expandPattern(pattern, params) {
  * handled by the upstream process.
  */
 async function prerenderPage(urlPath, route, params, cwd) {
+    setupStaticGenerationRuntime(cwd);
     try {
         const React = require('react');
         const { renderToString } = require('react-dom/server');

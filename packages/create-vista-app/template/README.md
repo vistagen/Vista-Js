@@ -14,6 +14,12 @@ pnpm dev
 
 Open [http://localhost:3003](http://localhost:3003) in your browser.
 
+If you want typed API starter files in a fresh app:
+
+```bash
+npx create-vista-app@latest my-vista-app --typed-api
+```
+
 ## Project Structure
 
 ```
@@ -42,6 +48,21 @@ vista.config.ts     # Framework configuration
 | `vista dev`   | Start dev server with live-reload |
 | `vista build` | Create production build           |
 | `vista start` | Start production server           |
+| `vista g api-init` | Generate typed API starter files |
+| `vista g router <name>` | Generate a typed router file |
+| `vista g procedure <name> [get\|post]` | Generate a typed procedure file |
+
+## Typed API Rollback
+
+Typed API is experimental and can be disabled anytime from `vista.config.ts`:
+
+```ts
+experimental: {
+  typedApi: {
+    enabled: false
+  }
+}
+```
 
 ## Learn More
 

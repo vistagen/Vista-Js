@@ -1,78 +1,70 @@
-import Image from 'vista/image';
-import { docsContent } from '../../data/docs';
+import { getDocBySlugParts, getDocPath, getDocsNavigation } from '../../lib/docs';
 
-export default function Docs() {
-    return (
-        <main className="min-h-screen bg-black selection:bg-primary/20 selection:text-primary text-zinc-100 font-sans">
-            <div className="max-w-3xl mx-auto px-6 pt-32 md:pt-40 pb-20">
-                <div className="mb-12">
-                    <h1 className="text-4xl md:text-5xl font-thin tracking-tight mb-6">
-                        {docsContent.intro.title}
-                    </h1>
-                    <div className="h-1 w-20 bg-primary rounded-full mb-8"></div>
-                </div>
+export default function DocsPage() {
+  const navigation = getDocsNavigation();
+  const firstStepsDoc = getDocBySlugParts(['getting-started', 'first-steps']);
+  const primaryCtaHref = firstStepsDoc
+    ? getDocPath(firstStepsDoc)
+    : navigation[0]?.docs[0]?.href || '/docs/introduction/the-beginning-of-vista';
 
-                <div className="prose prose-invert md:prose-lg max-w-none">
-                    {docsContent.intro.paragraphs.map((p, i) => (
-                        <p key={i}>
-                            {p.text.split(p.highlight).map((part, index, array) => (
-                                <span key={index}>
-                                    {part}
-                                    {index < array.length - 1 && (
-                                        <strong className={p.highlight === "alpha stage" ? "" : "text-primary"}>
-                                            {p.highlight}
-                                        </strong>
-                                    )}
-                                </span>
-                            ))}
-                        </p>
-                    ))}
+  return (
+    <article className="mx-auto max-w-3xl pb-20 pt-4">
+      <header className="mb-12 border-b border-zinc-900 pb-8">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Official Documentation</p>
+        <h1 className="mt-3 text-4xl font-semibold tracking-tight text-zinc-100 sm:text-5xl">
+          Build fast. Write less. Keep control.
+        </h1>
+        <p className="mt-5 text-lg leading-8 text-zinc-300">
+          Vista docs are now structured as category + slug routes, so you can scale guides and references without
+          changing URLs later.
+        </p>
 
-                    <h3>{docsContent.architecture.title}</h3>
-                    {docsContent.architecture.paragraphs.map((text, i) => (
-                        <p key={i}>{text}</p>
-                    ))}
+        <div className="mt-8 flex flex-wrap items-center gap-3">
+          <a
+            href={primaryCtaHref}
+            className="rounded-full border border-primary/40 bg-primary/10 px-5 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/15"
+          >
+            Start with First Steps
+          </a>
+          <p className="text-sm text-zinc-500">Docs are actively evolving during alpha.</p>
+        </div>
+      </header>
 
-                    <p className="mt-8 mb-16">
-                        {docsContent.footer.text}
-                    </p>
-
-                    <div className="text-center text-primary/50 text-4xl font-thin italic mb-16">
-                        {docsContent.footer.notice}
-                    </div>
-                </div>
-
-                {/* Founder's Note */}
-                <div className="border-t border-dashed border-zinc-800 pt-12 mt-12">
-                    <h3 className="text-2xl font-thin tracking-tight mb-6 text-zinc-300">
-                        A Note from the Founder
-                    </h3>
-                    <div className="prose prose-invert prose-sm max-w-none">
-                        <p className="text-zinc-400 leading-relaxed">
-                            Vista was born from a simple belief: that the future of web development
-                            shouldn't be controlled by complexity. Every developer deserves tools
-                            that are powerful yet intuitive, fast yet flexible.
-                        </p>
-                        <p className="text-zinc-400 leading-relaxed">
-                            This framework is my gift to the community—built with passion,
-                            countless late nights, and an unwavering commitment to developer experience.
-                            I hope Vista helps you build something extraordinary.
-                        </p>
-                    </div>
-
-                    <div className="mt-10 flex flex-col items-start">
-                        <img
-                            src="/signature.svg"
-                            alt="Ankan Dalui Signature"
-                            width={350}
-                            height={120}
-                            className="opacity-80 invert mb-2"
-                            style={{ marginLeft: '-60px' }}
-                        />
-                        <p className="text-zinc-500 text-lg font-medium -mt-2">Ankan Dalui, Founder, Vista.js</p>
-                    </div>
-                </div>
+      <section className="space-y-5">
+        {navigation.map((group) => (
+          <div key={group.id} className="rounded-2xl border border-zinc-900 bg-zinc-950/60 p-5">
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold tracking-tight text-zinc-100">{group.title}</h2>
+              <p className="mt-1 text-sm text-zinc-500">{group.description}</p>
             </div>
-        </main>
-    );
+            <ul className="space-y-2">
+              {group.docs.map((doc) => (
+                <li key={doc.href}>
+                  <a
+                    href={doc.href}
+                    className="group flex items-start justify-between rounded-lg border border-transparent px-3 py-2 transition-colors hover:border-zinc-800 hover:bg-zinc-900/80"
+                  >
+                    <span>
+                      <span className="block text-sm font-medium text-zinc-200 group-hover:text-zinc-100">{doc.title}</span>
+                      <span className="mt-1 block text-xs leading-relaxed text-zinc-500">{doc.summary}</span>
+                    </span>
+                    <span className="ml-4 mt-1 text-xs uppercase tracking-[0.12em] text-zinc-600">Open</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </section>
+
+      <section className="mt-12 rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/50 p-6">
+        <p className="text-sm uppercase tracking-[0.16em] text-zinc-500">Founder Quote</p>
+        <p className="mt-3 text-lg leading-8 text-zinc-300">
+          "Development should feel like momentum, not maintenance. Vista is built so product teams can ship more with
+          fewer lines."
+        </p>
+        <p className="mt-4 text-sm font-medium text-zinc-500">Ankan Dalui, Founder, Vista.js</p>
+      </section>
+    </article>
+  );
 }
