@@ -26,6 +26,8 @@ const constants_1 = require("../constants");
 const structure_validator_1 = require("../server/structure-validator");
 const static_generator_1 = require("../server/static-generator");
 const structure_log_1 = require("../server/structure-log");
+const devtools_indicator_snippet_1 = require("./devtools-indicator-snippet");
+const dev_error_overlay_snippet_1 = require("./dev-error-overlay-snippet");
 const _debug = !!process.env.VISTA_DEBUG;
 /**
  * Run PostCSS for CSS compilation
@@ -101,6 +103,7 @@ function collectFrameworkClientReferences(cwd) {
  * Generate the RSC-aware client entry file
  */
 function generateRSCClientEntry(cwd, vistaDir, isDev) {
+    const devToolsBootId = `rsc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     const clientEntryContent = `/**
  * Vista RSC Client Entry
  *
@@ -110,7 +113,7 @@ function generateRSCClientEntry(cwd, vistaDir, isDev) {
  */
 
 import * as React from 'react';
-import { hydrateRoot } from 'react-dom/client';
+import { hydrateRoot, createRoot } from 'react-dom/client';
 import { createFromFetch } from 'react-server-dom-webpack/client';
 import { RSCRouter } from 'vista/client/rsc-router';
 import { callServer } from 'vista/client/server-actions';
@@ -121,6 +124,58 @@ if (!rootElement) {
   throw new Error('Missing #root element for hydration.');
 }
 
+${isDev ? (0, devtools_indicator_snippet_1.getDevToolsIndicatorBootstrapSource)(devToolsBootId) : ''}
+${isDev ? (0, dev_error_overlay_snippet_1.getDevErrorOverlayBootstrapSource)() : ''}
+
+function buildRuntimeMessage(title: string, error: unknown): string {
+  var value = error as any;
+  var text = '';
+  if (value && typeof value === 'object') {
+    if (typeof value.message === 'string' && value.message.trim().length > 0) {
+      text = value.message;
+    }
+    if (typeof value.stack === 'string' && value.stack.trim().length > 0) {
+      text = text ? text + '\\n\\n' + value.stack : value.stack;
+    }
+  }
+  if (!text) {
+    text = typeof error === 'string' ? error : String(error || 'Unknown runtime error.');
+  }
+  return title + '\\n\\n' + text;
+}
+
+function reportDevRuntimeError(title: string, error: unknown): void {
+  if (typeof window === 'undefined') return;
+  var indicator = (window as any).__VISTA_DEVTOOLS_INDICATOR__;
+  var overlay = (window as any).__VISTA_DEV_ERROR_OVERLAY__;
+  var message = buildRuntimeMessage(title, error);
+  if (indicator && typeof indicator.setError === 'function') {
+    indicator.setError(title, 1);
+  }
+  if (overlay && typeof overlay.capture === 'function') {
+    overlay.capture([message]);
+    return;
+  }
+  if (overlay && typeof overlay.show === 'function') {
+    overlay.show([message]);
+    if (typeof overlay.minimize === 'function') {
+      overlay.minimize();
+    }
+    return;
+  }
+  console.error('[vista] ' + title + ':', error);
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('error', function (event) {
+    var runtimeError = (event as ErrorEvent).error || (event as ErrorEvent).message;
+    reportDevRuntimeError('Runtime Error', runtimeError);
+  });
+  window.addEventListener('unhandledrejection', function (event) {
+    reportDevRuntimeError('Unhandled Promise Rejection', (event as PromiseRejectionEvent).reason);
+  });
+}
+
 const pathname = window.location.pathname;
 const search = window.location.search;
 const initialResponse = createFromFetch(
@@ -128,13 +183,36 @@ const initialResponse = createFromFetch(
   { callServer }
 ) as Promise<React.ReactNode>;
 
-hydrateRoot(
-  rootElement as Document | Element,
-  React.createElement(RSCRouter, {
-    initialResponse,
-    initialPathname: pathname,
-  })
-);
+var appElement = React.createElement(RSCRouter, {
+  initialResponse,
+  initialPathname: pathname,
+});
+
+try {
+  hydrateRoot(
+    rootElement as Document | Element,
+    appElement,
+    {
+      onRecoverableError(error) {
+        var message = String((error as any)?.message || error || '');
+        if (/hydration|did not match|server rendered html|text content/i.test(message)) {
+          reportDevRuntimeError('Hydration Error', error);
+          return;
+        }
+        reportDevRuntimeError('Recoverable Error', error);
+      },
+    }
+  );
+} catch (error) {
+  reportDevRuntimeError('Hydration Error', error);
+  if (!hydrateDocument && rootElement instanceof Element) {
+    try {
+      createRoot(rootElement).render(appElement);
+    } catch (fallbackError) {
+      reportDevRuntimeError('Client Render Fallback Failed', fallbackError);
+    }
+  }
+}
 
 ${isDev
         ? `// Vista live-reload: listen for server component changes via SSE
@@ -142,12 +220,29 @@ ${isDev
   const es = new EventSource('${constants_1.SSE_ENDPOINT}');
   es.onmessage = (e) => {
     if (e.data === 'reload') {
-      window.location.reload();
+      const errorOverlay = window.__VISTA_DEV_ERROR_OVERLAY__;
+      if (errorOverlay && typeof errorOverlay.clear === 'function') {
+        errorOverlay.clear();
+      }
+      const indicator = window.__VISTA_DEVTOOLS_INDICATOR__;
+      if (indicator && typeof indicator.pulse === 'function') {
+        indicator.pulse('hmr', 460);
+      }
+      setTimeout(() => window.location.reload(), 180);
     } else {
       try {
         const msg = JSON.parse(e.data);
-        if (msg.type === 'error') {
+        if (msg.type === 'error' || msg.type === 'structure-error') {
+          const errorOverlay = window.__VISTA_DEV_ERROR_OVERLAY__;
+          if (errorOverlay && typeof errorOverlay.show === 'function') {
+            errorOverlay.show(msg.errors || msg.message);
+          }
           console.error('[vista] Build error:', msg.message);
+        } else if (msg.type === 'ok' || msg.type === 'structure-ok') {
+          const errorOverlay = window.__VISTA_DEV_ERROR_OVERLAY__;
+          if (errorOverlay && typeof errorOverlay.clear === 'function') {
+            errorOverlay.clear();
+          }
         }
       } catch {}
     }

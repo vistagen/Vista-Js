@@ -1,8 +1,7 @@
 /**
  * Vista Error Overlay
  *
- * A standalone error overlay that works without React hydration.
- * Uses inline styles and vanilla JS for interactivity.
+ * Standalone dev error UI with Next.js-style pagination and controls.
  */
 import React from 'react';
 export interface VistaError {

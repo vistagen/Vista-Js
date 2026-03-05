@@ -276,10 +276,15 @@ function startServer(port = 3003, compiler) {
             }, 100);
         };
         // Push compile errors to browser via SSE
-        const pushCompileError = (errorMessage) => {
+        const pushCompileError = (errorMessages) => {
+            const normalized = (Array.isArray(errorMessages) ? errorMessages : [])
+                .map((entry) => String(entry || '').trim())
+                .filter(Boolean);
+            const fallback = normalized.length > 0 ? normalized.join('\n\n') : 'Unknown build error.';
             const errorData = JSON.stringify({
                 type: 'error',
-                message: errorMessage,
+                message: fallback,
+                errors: normalized.length > 0 ? normalized : [fallback],
             });
             sseClients.forEach((client) => {
                 client.write(`data: ${errorData}\n\n`);
@@ -296,9 +301,17 @@ function startServer(port = 3003, compiler) {
         compiler.hooks.done.tap('VistaSSE', (stats) => {
             if (stats.hasErrors()) {
                 const errors = stats.toJson().errors || [];
-                const errorMessage = errors.map((e) => (typeof e === 'string' ? e : e.message)).join('\n');
+                const errorMessages = errors
+                    .map((e) => {
+                    if (typeof e === 'string')
+                        return e;
+                    if (e && typeof e.message === 'string')
+                        return e.message;
+                    return String(e || '');
+                })
+                    .filter((entry) => entry.trim().length > 0);
                 (0, logger_1.logEvent)('Build error detected, pushing to browser...');
-                pushCompileError(errorMessage);
+                pushCompileError(errorMessages);
             }
             else {
                 pushBuildSuccess();

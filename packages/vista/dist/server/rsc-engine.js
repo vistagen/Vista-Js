@@ -296,6 +296,41 @@ function normalizeSSRManifest(manifest) {
     }
     const moduleMap = manifest.moduleMap;
     const aliasEntries = [];
+    const pushAlias = (key, exportsMap) => {
+        if (!key)
+            return;
+        aliasEntries.push([key, exportsMap]);
+        // React Flight may request module IDs with/without a trailing '#'.
+        if (key.endsWith('#')) {
+            aliasEntries.push([key.slice(0, -1), exportsMap]);
+        }
+        else {
+            aliasEntries.push([`${key}#`, exportsMap]);
+        }
+        // Normalize URI encoding variants for Windows paths with spaces, etc.
+        if (key.startsWith('file://')) {
+            try {
+                const decoded = decodeURI(key);
+                if (decoded !== key) {
+                    aliasEntries.push([decoded, exportsMap]);
+                    aliasEntries.push([decoded.endsWith('#') ? decoded.slice(0, -1) : `${decoded}#`, exportsMap]);
+                }
+            }
+            catch {
+                // ignore decode failures
+            }
+            try {
+                const encoded = encodeURI(key);
+                if (encoded !== key) {
+                    aliasEntries.push([encoded, exportsMap]);
+                    aliasEntries.push([encoded.endsWith('#') ? encoded.slice(0, -1) : `${encoded}#`, exportsMap]);
+                }
+            }
+            catch {
+                // ignore encode failures
+            }
+        }
+    };
     for (const [moduleKey, exportsMap] of Object.entries(moduleMap)) {
         const normalizedExports = {};
         for (const [exportName, rawEntry] of Object.entries(exportsMap || {})) {
@@ -308,10 +343,10 @@ function normalizeSSRManifest(manifest) {
             };
         }
         moduleMap[moduleKey] = normalizedExports;
-        aliasEntries.push([moduleKey, normalizedExports]);
+        pushAlias(moduleKey, normalizedExports);
         for (const normalizedEntry of Object.values(normalizedExports)) {
             const aliasKey = String(normalizedEntry.id);
-            aliasEntries.push([aliasKey, normalizedExports]);
+            pushAlias(aliasKey, normalizedExports);
         }
     }
     for (const [aliasKey, exportsMap] of aliasEntries) {
@@ -688,6 +723,55 @@ function wrapInDocumentShell(bodyContent, metadataHtml, chunkFiles, rootMode) {
 </body>
 </html>`;
 }
+function normalizeWebpackErrors(stats) {
+    const errors = stats.toJson().errors || [];
+    const normalizedErrors = errors
+        .map((entry) => {
+        if (typeof entry === 'string')
+            return entry;
+        if (entry && typeof entry.message === 'string')
+            return entry.message;
+        return String(entry || '');
+    })
+        .filter((entry) => entry.trim().length > 0);
+    if (normalizedErrors.length > 0) {
+        return normalizedErrors;
+    }
+    return ['Unknown build error.'];
+}
+function renderCompilePendingHTML() {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Compiling...</title>
+  <style>
+    html,body{height:100%;margin:0}
+    body{
+      display:grid;
+      place-items:center;
+      font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;
+      background:#09090b;
+      color:#f4f4f5;
+    }
+    .vista-dev-pending{
+      padding:20px 24px;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,0.15);
+      background:rgba(17,17,20,0.92);
+      box-shadow:0 18px 42px rgba(0,0,0,0.4);
+      font-size:14px;
+      letter-spacing:0.01em;
+    }
+  </style>
+</head>
+<body>
+  <div class="vista-dev-pending">Vista is compiling the client bundle. Retrying...</div>
+  <script>setTimeout(function(){window.location.reload();},700);</script>
+</body>
+</html>`;
+}
 function startRSCServer(options = {}) {
     const app = (0, express_1.default)();
     const cwd = process.cwd();
@@ -847,6 +931,8 @@ function startRSCServer(options = {}) {
     // - Pushes compile errors/success from webpack client build
     // ========================================================================
     const sseReloadClients = new Set();
+    let clientCompileState = isDev && options.compiler ? 'compiling' : 'ready';
+    let clientCompileErrors = [];
     if (isDev) {
         app.get(constants_1.SSE_ENDPOINT, (req, res) => {
             res.setHeader('Content-Type', 'text/event-stream');
@@ -935,15 +1021,27 @@ function startRSCServer(options = {}) {
             writeToDisk: true,
         }));
         // No webpack-hot-middleware — Vista uses SSE live-reload for RSC
+        options.compiler.hooks.invalid.tap('VistaRSCCompileStateInvalid', () => {
+            clientCompileState = 'compiling';
+            clientCompileErrors = [];
+        });
         // Push compile errors/success to SSE clients
         options.compiler.hooks.done.tap('VistaRSCLiveReload', (stats) => {
             if (stats.hasErrors()) {
-                const errors = stats.toJson().errors || [];
-                const msg = errors.map((e) => (typeof e === 'string' ? e : e.message)).join('\n');
-                const payload = JSON.stringify({ type: 'error', message: msg });
+                const normalizedErrors = normalizeWebpackErrors(stats);
+                const fallback = normalizedErrors.join('\n\n');
+                clientCompileState = 'error';
+                clientCompileErrors = normalizedErrors;
+                const payload = JSON.stringify({
+                    type: 'error',
+                    message: fallback,
+                    errors: normalizedErrors,
+                });
                 sseReloadClients.forEach((c) => c.write(`data: ${payload}\n\n`));
             }
             else {
+                clientCompileState = 'ready';
+                clientCompileErrors = [];
                 const payload = JSON.stringify({ type: 'ok' });
                 sseReloadClients.forEach((c) => c.write(`data: ${payload}\n\n`));
             }
@@ -1031,6 +1129,16 @@ function startRSCServer(options = {}) {
     app.use(constants_1.URL_PREFIX, express_1.default.static(path_1.default.join(cwd, constants_1.BUILD_DIR)));
     app.use(express_1.default.static(path_1.default.join(cwd, constants_1.BUILD_DIR)));
     const proxyRSCRequest = async (req, res) => {
+        if (isDev && options.compiler) {
+            if (clientCompileState === 'compiling') {
+                res.status(503).type('text/plain').send('[vista] Client bundle is compiling. Retry shortly.');
+                return;
+            }
+            if (clientCompileState === 'error') {
+                res.status(500).type('text/plain').send(clientCompileErrors.join('\n\n'));
+                return;
+            }
+        }
         try {
             const fetchOptions = {
                 method: req.method,
@@ -1121,6 +1229,19 @@ function startRSCServer(options = {}) {
                 .type('text/html')
                 .send((0, dev_error_1.renderErrorHTML)([errorInfo]));
             return;
+        }
+        if (isDev && options.compiler) {
+            if (clientCompileState === 'compiling') {
+                res.status(503).type('text/html').send(renderCompilePendingHTML());
+                return;
+            }
+            if (clientCompileState === 'error') {
+                const errorInfos = (clientCompileErrors.length > 0
+                    ? clientCompileErrors
+                    : ['Unknown client build error.']).map((message) => ({ type: 'build', message }));
+                res.status(500).type('text/html').send((0, dev_error_1.renderErrorHTML)(errorInfos));
+                return;
+            }
         }
         if (req.path.startsWith('/api/')) {
             await handleApiRoute(req, res, cwd, isDev, typedApiConfig);

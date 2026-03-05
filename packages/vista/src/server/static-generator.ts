@@ -11,6 +11,7 @@
 import path from 'path';
 import fs from 'fs';
 import type { RouteEntry, ServerManifest } from '../build/rsc/server-manifest';
+import { BUILD_DIR, STATIC_CHUNKS_PATH } from '../constants';
 import {
   type CachedPage,
   type PrerenderManifest,
@@ -280,6 +281,49 @@ async function prerenderPage(
       return null;
     }
 
+    let metadata: Record<string, unknown> = {};
+    const searchParams = {};
+
+    for (const layoutPath of route.layoutPaths) {
+      try {
+        const layoutModule = require(layoutPath);
+        if (layoutModule?.metadata && typeof layoutModule.metadata === 'object') {
+          metadata = { ...metadata, ...layoutModule.metadata };
+        }
+      } catch {
+        // Ignore layout metadata failures for static generation.
+      }
+    }
+
+    if (pageModule.metadata && typeof pageModule.metadata === 'object') {
+      metadata = { ...metadata, ...pageModule.metadata };
+    }
+
+    if (typeof pageModule.generateMetadata === 'function') {
+      try {
+        const dynamicMeta = await pageModule.generateMetadata(
+          { params: params || {}, searchParams },
+          metadata
+        );
+        if (dynamicMeta && typeof dynamicMeta === 'object') {
+          metadata = { ...metadata, ...dynamicMeta };
+        }
+      } catch (metadataError) {
+        console.warn(
+          `[vista:ssg] generateMetadata failed for ${urlPath}:`,
+          (metadataError as Error)?.message || String(metadataError)
+        );
+      }
+    }
+
+    let metadataHtml = '';
+    try {
+      const { generateMetadataHtml } = require('../metadata/generate');
+      metadataHtml = generateMetadataHtml(metadata as any);
+    } catch {
+      metadataHtml = '';
+    }
+
     // Build the element, passing params as props
     let element = await renderComponent(PageComponent, { params: params || {} });
 
@@ -304,7 +348,7 @@ async function prerenderPage(
     const html = renderToString(element);
 
     return {
-      html: wrapInDocument(html, urlPath),
+      html: wrapInDocument(html, urlPath, metadataHtml, cwd),
       generatedAt: Date.now(),
       revalidate: route.revalidate || 0,
       routePattern: route.pattern,
@@ -322,13 +366,51 @@ async function prerenderPage(
 /**
  * Wrap rendered HTML in a basic document shell.
  */
-function wrapInDocument(bodyHtml: string, _urlPath: string): string {
+function injectBeforeClosingTag(html: string, tagName: string, injection: string): string {
+  const closeTag = `</${tagName}>`;
+  if (html.includes(closeTag)) {
+    return html.replace(closeTag, `${injection}\n${closeTag}`);
+  }
+  return html;
+}
+
+function getCSSLinks(cwd: string): string {
+  const links = ['<link rel="stylesheet" href="/styles.css" />'];
+  const chunksDir = path.join(cwd, BUILD_DIR, 'static', 'chunks');
+
+  try {
+    if (fs.existsSync(chunksDir)) {
+      const files = fs.readdirSync(chunksDir).filter((entry) => entry.endsWith('.css'));
+      for (const file of files) {
+        links.push(`<link rel="stylesheet" href="${STATIC_CHUNKS_PATH}${file}" />`);
+      }
+    }
+  } catch {
+    // Ignore CSS discovery failures during static generation.
+  }
+
+  return links.join('\n  ');
+}
+
+function wrapInDocument(bodyHtml: string, _urlPath: string, metadataHtml: string, cwd: string): string {
+  const headInjection = `\n  <meta charset="utf-8" />\n  <meta name="viewport" content="width=device-width, initial-scale=1" />\n  ${metadataHtml}\n  ${getCSSLinks(cwd)}`;
+  const hasDocumentMarkup =
+    /<html(?:\s|>)/i.test(bodyHtml) && /<\/html>/i.test(bodyHtml);
+
+  if (hasDocumentMarkup) {
+    const htmlStart = bodyHtml.search(/<html(?:\s|>)/i);
+    let html = htmlStart > 0 ? bodyHtml.slice(htmlStart) : bodyHtml;
+    if (!/^\s*<!doctype html>/i.test(html)) {
+      html = `<!DOCTYPE html>\n${html}`;
+    }
+    html = injectBeforeClosingTag(html, 'head', headInjection);
+    return html;
+  }
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="/styles.css" />
+  ${headInjection}
 </head>
 <body>
   <div id="root">${bodyHtml}</div>
