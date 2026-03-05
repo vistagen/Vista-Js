@@ -15,6 +15,8 @@ import {
   type StructureValidationResult,
 } from '../server/structure-validator';
 import { logValidationResult, formatBuildFailTable } from '../server/structure-log';
+import { getDevToolsIndicatorBootstrapSource } from './devtools-indicator-snippet';
+import { getDevErrorOverlayBootstrapSource } from './dev-error-overlay-snippet';
 
 const _debug = !!process.env.VISTA_DEBUG;
 
@@ -90,6 +92,7 @@ function generateClientEntry(
   clientComponents: Array<{ relativePath: string; absolutePath: string }>,
   isDev: boolean = false
 ) {
+  const devToolsBootId = `legacy-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const appDir = path.join(cwd, 'app');
 
   // Generate imports ONLY for client components
@@ -232,56 +235,37 @@ if ((module as any).hot) {
 ${
   isDev
     ? `
-// Vista Error Overlay Logic
-const VISTA_ERROR_ID = 'vista-compile-error';
-
-function showCompileError(message: string) {
-    let div = document.getElementById(VISTA_ERROR_ID);
-    if (!div) {
-        div = document.createElement('div');
-        div.id = VISTA_ERROR_ID;
-        div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:99999;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;backdrop-filter:blur(4px);';
-        document.body.appendChild(div);
-    }
-    
-    div.innerHTML = \`
-        <div style="width:100%;max-width:900px;max-height:90vh;display:flex;flex-direction:column;background:#0a0a0a;border:1px solid #333;border-radius:12px;box-shadow:0 24px 48px -12px rgba(0,0,0,0.5);overflow:hidden;">
-            <div style="padding:16px 24px;background:#111;border-bottom:1px solid #333;display:flex;align-items:center;justify-content:space-between;">
-                <div style="display:flex;align-items:center;gap:12px;">
-                     <span style="font-weight:600;color:#f87171;background:rgba(248,113,113,0.1);padding:4px 12px;border-radius:99px;font-size:12px;display:flex;align-items:center;gap:6px;">
-                        <span style="width:8px;height:8px;background:currentColor;border-radius:50%;"></span>
-                        BUILD ERROR
-                    </span>
-                    <span style="color:#666;font-size:13px;">Vista JS Dev</span>
-                </div>
-            </div>
-            <div style="padding:24px;overflow:auto;background:#0a0a0a;">
-                <pre style="margin:0;font-size:13px;line-height:1.6;color:#e5e7eb;white-space:pre-wrap;">\${message.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
-            </div>
-        </div>
-    \`;
-}
-
-function hideCompileError() {
-    const div = document.getElementById(VISTA_ERROR_ID);
-    if (div) div.remove();
-}
+${getDevToolsIndicatorBootstrapSource(devToolsBootId)}
+${getDevErrorOverlayBootstrapSource()}
 
 const sse = new EventSource('${SSE_ENDPOINT}');
 sse.onmessage = (event) => {
     if (event.data === 'reload') {
-        hideCompileError();
+        const errorOverlay = window.__VISTA_DEV_ERROR_OVERLAY__;
+        if (errorOverlay && typeof errorOverlay.clear === 'function') {
+            errorOverlay.clear();
+        }
         console.log('[Vista] Server component changed, reloading...');
-        window.location.reload();
+        const indicator = window.__VISTA_DEVTOOLS_INDICATOR__;
+        if (indicator && typeof indicator.pulse === 'function') {
+            indicator.pulse('hmr', 460);
+        }
+        setTimeout(() => window.location.reload(), 180);
         return;
     }
     
     try {
         const data = JSON.parse(event.data);
-        if (data.type === 'error') {
-            showCompileError(data.message);
-        } else if (data.type === 'ok') {
-            hideCompileError();
+        if (data.type === 'error' || data.type === 'structure-error') {
+            const errorOverlay = window.__VISTA_DEV_ERROR_OVERLAY__;
+            if (errorOverlay && typeof errorOverlay.show === 'function') {
+                errorOverlay.show(data.errors || data.message);
+            }
+        } else if (data.type === 'ok' || data.type === 'structure-ok') {
+            const errorOverlay = window.__VISTA_DEV_ERROR_OVERLAY__;
+            if (errorOverlay && typeof errorOverlay.clear === 'function') {
+                errorOverlay.clear();
+            }
         }
     } catch (e) {
         // Ignore JSON parse errors for non-JSON messages

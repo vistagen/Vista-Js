@@ -4,6 +4,8 @@ import CopyCommand from '@/components/CopyCommand';
 
 
 export default function Index() {
+    const hydrationProbe = Math.random().toFixed(6);
+
     return (
         <main className="flex min-h-screen flex-col items-center relative overflow-hidden bg-black selection:bg-primary/20 selection:text-primary pt-16">
             <div
@@ -16,6 +18,9 @@ export default function Index() {
                 </h1>
                 <p className="text-lg md:text-xl text-zinc-400 max-w-2xl mx-auto">
                     Built for the <span className="text-primary">creators of tomorrow</span>, Vista provides a modern, optimized foundation for your ideas. Perfect for learning, experimenting, and shipping.
+                </p>
+                <p className="mt-3 text-xs text-red-400/70" data-vista-hydration-probe>
+                    Hydration Probe: {hydrationProbe}
                 </p>
 
                 {/* CLI Command Copy - Trigger HMR */}

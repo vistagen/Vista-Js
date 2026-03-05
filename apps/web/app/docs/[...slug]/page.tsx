@@ -3,7 +3,12 @@ import { Code } from '../../../components/mdx/code';
 import { allDocs } from 'content-collections';
 import Link from 'vista/link';
 import type { DocsDocSection } from '../../../content/docs';
-import { getCategoryById, getDocNeighbors, getDocPath, normalizeDocRouteSlug } from '../../../lib/docs';
+import {
+  getCategoryById,
+  getDocNeighbors,
+  getDocPath,
+  normalizeDocRouteSlug,
+} from '../../../lib/docs';
 import { slugify } from '../../../lib/utils';
 import SignatureBlock from '../signature-block';
 
@@ -25,7 +30,9 @@ async function resolveRouteParams(input: DocsArticlePageProps['params']): Promis
 function renderNotFound() {
   return (
     <article className="mx-auto max-w-3xl pb-16 pt-4">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Documentation</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
+        Documentation
+      </p>
       <h1 className="mt-3 text-4xl font-semibold tracking-tight text-zinc-100">Doc not found</h1>
       <p className="mt-4 text-base leading-7 text-zinc-400">
         The page you are trying to open does not exist yet, or the slug is invalid.
@@ -79,7 +86,10 @@ function renderSection(section: DocsDocSection, index: number, headingId: string
 
   if (section.type === 'list') {
     return (
-      <ul key={`list-${index}`} className="list-disc space-y-2 pl-5 text-base leading-8 text-zinc-300">
+      <ul
+        key={`list-${index}`}
+        className="list-disc space-y-2 pl-5 text-base leading-8 text-zinc-300"
+      >
         {section.items.map((item) => (
           <li key={item}>{item}</li>
         ))}
@@ -88,7 +98,14 @@ function renderSection(section: DocsDocSection, index: number, headingId: string
   }
 
   if (section.type === 'code') {
-    return <Code key={`code-${index}`} language={section.language} title={section.title} code={section.code} />;
+    return (
+      <Code
+        key={`code-${index}`}
+        language={section.language}
+        title={section.title}
+        code={section.code}
+      />
+    );
   }
 
   if (section.type === 'quote') {
@@ -104,7 +121,9 @@ function renderSection(section: DocsDocSection, index: number, headingId: string
 
   return (
     <div key={`links-${index}`} className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
-      {section.title ? <p className="mb-3 text-sm font-medium text-zinc-300">{section.title}</p> : null}
+      {section.title ? (
+        <p className="mb-3 text-sm font-medium text-zinc-300">{section.title}</p>
+      ) : null}
       <ul className="space-y-2">
         {section.links.map((link) => (
           <li key={`${link.href}-${link.label}`}>
@@ -118,7 +137,10 @@ function renderSection(section: DocsDocSection, index: number, headingId: string
                 {link.label}
               </a>
             ) : (
-              <Link href={link.href} className="text-sm text-primary transition-colors hover:text-primary/80">
+              <Link
+                href={link.href}
+                className="text-sm text-primary transition-colors hover:text-primary/80"
+              >
                 {link.label}
               </Link>
             )}
@@ -167,7 +189,9 @@ export default async function DocsArticlePage({ params }: DocsArticlePageProps) 
             {doc.title}
           </h1>
           <p className="mt-4 max-w-2xl text-lg leading-8 text-zinc-300">{doc.summary}</p>
-          <p className="mt-4 text-xs uppercase tracking-[0.12em] text-zinc-500">Updated: {doc.updatedAt}</p>
+          <p className="mt-4 text-xs uppercase tracking-[0.12em] text-zinc-500">
+            Updated: {doc.updatedAt}
+          </p>
         </header>
 
         {showFounderNote ? (

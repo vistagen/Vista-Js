@@ -16,6 +16,7 @@ exports.generateStaticPages = generateStaticPages;
 exports.revalidatePath = revalidatePath;
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
+const constants_1 = require("../constants");
 const static_cache_1 = require("./static-cache");
 const CjsModule = require('module');
 let staticRuntimeReady = false;
@@ -203,6 +204,41 @@ async function prerenderPage(urlPath, route, params, cwd) {
             console.warn(`[vista:ssg] No default export in ${route.pagePath}`);
             return null;
         }
+        let metadata = {};
+        const searchParams = {};
+        for (const layoutPath of route.layoutPaths) {
+            try {
+                const layoutModule = require(layoutPath);
+                if (layoutModule?.metadata && typeof layoutModule.metadata === 'object') {
+                    metadata = { ...metadata, ...layoutModule.metadata };
+                }
+            }
+            catch {
+                // Ignore layout metadata failures for static generation.
+            }
+        }
+        if (pageModule.metadata && typeof pageModule.metadata === 'object') {
+            metadata = { ...metadata, ...pageModule.metadata };
+        }
+        if (typeof pageModule.generateMetadata === 'function') {
+            try {
+                const dynamicMeta = await pageModule.generateMetadata({ params: params || {}, searchParams }, metadata);
+                if (dynamicMeta && typeof dynamicMeta === 'object') {
+                    metadata = { ...metadata, ...dynamicMeta };
+                }
+            }
+            catch (metadataError) {
+                console.warn(`[vista:ssg] generateMetadata failed for ${urlPath}:`, metadataError?.message || String(metadataError));
+            }
+        }
+        let metadataHtml = '';
+        try {
+            const { generateMetadataHtml } = require('../metadata/generate');
+            metadataHtml = generateMetadataHtml(metadata);
+        }
+        catch {
+            metadataHtml = '';
+        }
         // Build the element, passing params as props
         let element = await renderComponent(PageComponent, { params: params || {} });
         // Wrap in layouts (outside-in)
@@ -221,7 +257,7 @@ async function prerenderPage(urlPath, route, params, cwd) {
         // Render to HTML string
         const html = renderToString(element);
         return {
-            html: wrapInDocument(html, urlPath),
+            html: wrapInDocument(html, urlPath, metadataHtml, cwd),
             generatedAt: Date.now(),
             revalidate: route.revalidate || 0,
             routePattern: route.pattern,
@@ -236,13 +272,45 @@ async function prerenderPage(urlPath, route, params, cwd) {
 /**
  * Wrap rendered HTML in a basic document shell.
  */
-function wrapInDocument(bodyHtml, _urlPath) {
+function injectBeforeClosingTag(html, tagName, injection) {
+    const closeTag = `</${tagName}>`;
+    if (html.includes(closeTag)) {
+        return html.replace(closeTag, `${injection}\n${closeTag}`);
+    }
+    return html;
+}
+function getCSSLinks(cwd) {
+    const links = ['<link rel="stylesheet" href="/styles.css" />'];
+    const chunksDir = path_1.default.join(cwd, constants_1.BUILD_DIR, 'static', 'chunks');
+    try {
+        if (fs_1.default.existsSync(chunksDir)) {
+            const files = fs_1.default.readdirSync(chunksDir).filter((entry) => entry.endsWith('.css'));
+            for (const file of files) {
+                links.push(`<link rel="stylesheet" href="${constants_1.STATIC_CHUNKS_PATH}${file}" />`);
+            }
+        }
+    }
+    catch {
+        // Ignore CSS discovery failures during static generation.
+    }
+    return links.join('\n  ');
+}
+function wrapInDocument(bodyHtml, _urlPath, metadataHtml, cwd) {
+    const headInjection = `\n  <meta charset="utf-8" />\n  <meta name="viewport" content="width=device-width, initial-scale=1" />\n  ${metadataHtml}\n  ${getCSSLinks(cwd)}`;
+    const hasDocumentMarkup = /<html(?:\s|>)/i.test(bodyHtml) && /<\/html>/i.test(bodyHtml);
+    if (hasDocumentMarkup) {
+        const htmlStart = bodyHtml.search(/<html(?:\s|>)/i);
+        let html = htmlStart > 0 ? bodyHtml.slice(htmlStart) : bodyHtml;
+        if (!/^\s*<!doctype html>/i.test(html)) {
+            html = `<!DOCTYPE html>\n${html}`;
+        }
+        html = injectBeforeClosingTag(html, 'head', headInjection);
+        return html;
+    }
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="/styles.css" />
+  ${headInjection}
 </head>
 <body>
   <div id="root">${bodyHtml}</div>
