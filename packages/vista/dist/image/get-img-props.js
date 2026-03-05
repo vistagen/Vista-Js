@@ -31,8 +31,13 @@ function getImgProps(props, config = image_config_1.imageConfigDefault, defaultL
     // Handle Dimensions
     let widthInt = width ? Number(width) : undefined;
     let heightInt = height ? Number(height) : undefined;
+    const vercelStaticBuild = typeof window === 'undefined' &&
+        (process.env.VERCEL === '1' || typeof process.env.VERCEL_URL === 'string');
+    // Disable optimizer when explicitly requested, configured globally,
+    // or when building for Vercel static output (no /_vista/image endpoint).
+    const disableOptimization = !!unoptimized || !!config.unoptimized || vercelStaticBuild;
     // Generate SrcSet
-    const srcSet = generateSrcSet(src, widthInt, loader, config, !!unoptimized);
+    const srcSet = generateSrcSet(src, widthInt, loader, config, disableOptimization);
     return {
         ...rest,
         src,
