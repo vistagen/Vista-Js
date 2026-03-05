@@ -1,4 +1,5 @@
 import { siteConfig } from '../data/site';
+import Image from 'vista/image';
 
 export default function Footer() {
     return (
@@ -6,7 +7,7 @@ export default function Footer() {
             {/* Logo Area */}
             <div className="w-full flex items-center justify-center overflow-hidden h-[200px] md:h-[300px]">
                 <div className="opacity-100">
-                    <img
+                    <Image
                         src="/vista.svg"
                         alt="Vista Logo"
                         width={500}

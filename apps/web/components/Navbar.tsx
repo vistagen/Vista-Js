@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { Github } from 'lucide-react';
 import Link from 'vista/link';
+import Image from 'vista/image';
 import { siteConfig } from '../data/site';
 
 export default function Navbar() {
@@ -24,7 +25,7 @@ export default function Navbar() {
         >
             <div className="max-w-7xl mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
                 <a href="/" className="flex items-center gap-2">
-                    <img
+                    <Image
                         src="/vista.svg"
                         width={120}
                         height={40}

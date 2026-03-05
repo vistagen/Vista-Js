@@ -17,6 +17,7 @@ import {
 import { logValidationResult, formatBuildFailTable } from '../server/structure-log';
 import { getDevToolsIndicatorBootstrapSource } from './devtools-indicator-snippet';
 import { getDevErrorOverlayBootstrapSource } from './dev-error-overlay-snippet';
+import { generateDeploymentOutputs } from './deploy-output';
 
 const _debug = !!process.env.VISTA_DEBUG;
 
@@ -479,6 +480,11 @@ export async function buildClient(
 
         // Build CSS
         runPostCSS(cwd, vistaDir);
+        generateDeploymentOutputs({
+          cwd,
+          vistaDir,
+          debug: _debug,
+        });
 
         compiler!.close((closeErr) => {
           if (closeErr) console.error('Error closing compiler:', closeErr);

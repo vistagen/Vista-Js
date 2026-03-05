@@ -28,6 +28,7 @@ const static_generator_1 = require("../server/static-generator");
 const structure_log_1 = require("../server/structure-log");
 const devtools_indicator_snippet_1 = require("./devtools-indicator-snippet");
 const dev_error_overlay_snippet_1 = require("./dev-error-overlay-snippet");
+const deploy_output_1 = require("./deploy-output");
 const _debug = !!process.env.VISTA_DEBUG;
 /**
  * Run PostCSS for CSS compilation
@@ -555,6 +556,11 @@ async function buildRSC(watch = false) {
         const prerenderManifestPath = path_1.default.join(vistaDirs.root, 'prerender-manifest.json');
         fs_1.default.writeFileSync(prerenderManifestPath, JSON.stringify(ssgResult.manifest, null, 2));
         console.log('[Vista JS RSC] Wrote prerender-manifest.json');
+        (0, deploy_output_1.generateDeploymentOutputs)({
+            cwd,
+            vistaDir: vistaDirs.root,
+            debug: _debug,
+        });
         console.log('');
         console.log('╔══════════════════════════════════════════════════════════════╗');
         console.log('║                    Build Complete! 🎉                        ║');

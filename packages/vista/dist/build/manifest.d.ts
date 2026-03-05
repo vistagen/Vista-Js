@@ -22,7 +22,7 @@ export interface VistaDirs {
 }
 /**
  * Create the .vista directory structure.
- * In legacy mode, only creates root + cache (no empty server/static dirs).
+ * In legacy mode, only creates root (no empty server/static dirs).
  * In RSC mode, creates the full structure for server/client bundles.
  */
 export declare function createVistaDirectories(cwd: string, mode?: 'legacy' | 'rsc'): VistaDirs;

@@ -33,6 +33,7 @@ import { generateStaticPages } from '../server/static-generator';
 import { logValidationResult, formatBuildFailTable } from '../server/structure-log';
 import { getDevToolsIndicatorBootstrapSource } from './devtools-indicator-snippet';
 import { getDevErrorOverlayBootstrapSource } from './dev-error-overlay-snippet';
+import { generateDeploymentOutputs } from './deploy-output';
 
 const _debug = !!process.env.VISTA_DEBUG;
 
@@ -644,6 +645,11 @@ export async function buildRSC(watch: boolean = false): Promise<{
     const prerenderManifestPath = path.join(vistaDirs.root, 'prerender-manifest.json');
     fs.writeFileSync(prerenderManifestPath, JSON.stringify(ssgResult.manifest, null, 2));
     console.log('[Vista JS RSC] Wrote prerender-manifest.json');
+    generateDeploymentOutputs({
+      cwd,
+      vistaDir: vistaDirs.root,
+      debug: _debug,
+    });
     console.log('');
 
     console.log('╔══════════════════════════════════════════════════════════════╗');
