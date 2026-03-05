@@ -295,8 +295,39 @@ function getCSSLinks(cwd) {
     }
     return links.join('\n  ');
 }
+function getChunkScripts(cwd) {
+    const chunksDir = path_1.default.join(cwd, constants_1.BUILD_DIR, 'static', 'chunks');
+    try {
+        if (!fs_1.default.existsSync(chunksDir)) {
+            return '';
+        }
+        const files = fs_1.default
+            .readdirSync(chunksDir)
+            .filter((entry) => entry.endsWith('.js') && !entry.endsWith('.map') && !entry.includes('.hot-update.'));
+        const priority = ['webpack.js', 'framework.js', 'vendor.js'];
+        files.sort((a, b) => {
+            const ai = priority.indexOf(a);
+            const bi = priority.indexOf(b);
+            if (ai !== -1 && bi !== -1)
+                return ai - bi;
+            if (ai !== -1)
+                return -1;
+            if (bi !== -1)
+                return 1;
+            return a.localeCompare(b);
+        });
+        return files
+            .map((file) => `<script defer src="${constants_1.STATIC_CHUNKS_PATH}${file}"></script>`)
+            .join('\n  ');
+    }
+    catch {
+        // Ignore chunk discovery failures during static generation.
+        return '';
+    }
+}
 function wrapInDocument(bodyHtml, _urlPath, metadataHtml, cwd) {
     const headInjection = `\n  <meta charset="utf-8" />\n  <meta name="viewport" content="width=device-width, initial-scale=1" />\n  ${metadataHtml}\n  ${getCSSLinks(cwd)}`;
+    const scripts = getChunkScripts(cwd);
     const hasDocumentMarkup = /<html(?:\s|>)/i.test(bodyHtml) && /<\/html>/i.test(bodyHtml);
     if (hasDocumentMarkup) {
         const htmlStart = bodyHtml.search(/<html(?:\s|>)/i);
@@ -305,6 +336,8 @@ function wrapInDocument(bodyHtml, _urlPath, metadataHtml, cwd) {
             html = `<!DOCTYPE html>\n${html}`;
         }
         html = injectBeforeClosingTag(html, 'head', headInjection);
+        const bodyInjection = `\n  <script>window.${constants_1.HYDRATE_DOCUMENT_FLAG} = true;</script>\n  ${scripts}`;
+        html = injectBeforeClosingTag(html, 'body', bodyInjection);
         return html;
     }
     return `<!DOCTYPE html>
@@ -313,7 +346,9 @@ function wrapInDocument(bodyHtml, _urlPath, metadataHtml, cwd) {
   ${headInjection}
 </head>
 <body>
+  <script>window.${constants_1.HYDRATE_DOCUMENT_FLAG} = false;</script>
   <div id="root">${bodyHtml}</div>
+  ${scripts}
 </body>
 </html>`;
 }
