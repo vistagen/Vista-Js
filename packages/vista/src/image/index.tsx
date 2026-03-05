@@ -33,11 +33,13 @@ export const Image = forwardRef<HTMLImageElement, EnhancedImageProps>((props, re
         placeholder,
         blurDataURL,
         onLoadingComplete,
+        onError,
         priority,
         ...restProps
     } = props;
 
     const [isLoaded, setIsLoaded] = useState(false);
+    const [useDirectSrc, setUseDirectSrc] = useState(false);
 
     // Combine refs
     const setRefs = useCallback((node: HTMLImageElement | null) => {
@@ -64,12 +66,26 @@ export const Image = forwardRef<HTMLImageElement, EnhancedImageProps>((props, re
         }
     }, [onLoadingComplete]);
 
+    const handleError = useCallback((event: React.SyntheticEvent<HTMLImageElement>) => {
+        if (!useDirectSrc) {
+            // If optimizer endpoint fails (common on static hosts), fall back to raw src.
+            setUseDirectSrc(true);
+        }
+        if (typeof onError === 'function') {
+            onError(event);
+        }
+    }, [onError, useDirectSrc]);
+
     // Get processed img props
     const imgProps = getImgProps(
-        { ...restProps, priority },
+        { ...restProps, priority, unoptimized: useDirectSrc || restProps.unoptimized },
         imageConfigDefault,
         defaultLoader
     );
+
+    const fallbackSrc = String(restProps.src || '');
+    const effectiveSrc = useDirectSrc ? fallbackSrc : imgProps.src;
+    const effectiveSrcSet = useDirectSrc ? undefined : imgProps.srcSet;
 
     // Determine if we should show blur placeholder
     const showBlur = placeholder === 'blur' && blurDataURL && !isLoaded;
@@ -81,6 +97,7 @@ export const Image = forwardRef<HTMLImageElement, EnhancedImageProps>((props, re
             {...imgProps}
             ref={setRefs}
             onLoad={handleLoad}
+            onError={handleError}
             style={{
                 ...imgProps.style,
                 ...(showBlur ? {
@@ -88,8 +105,8 @@ export const Image = forwardRef<HTMLImageElement, EnhancedImageProps>((props, re
                     transition: 'opacity 0.5s ease-in-out'
                 } : {}),
             }}
-            src={imgProps.src}
-            srcSet={imgProps.srcSet}
+            src={effectiveSrc}
+            srcSet={effectiveSrcSet}
             decoding={priority ? 'sync' : 'async'}
             fetchPriority={priority ? 'high' : undefined}
         />

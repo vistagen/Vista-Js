@@ -25,8 +25,9 @@ const wrapperStyle = {
     overflow: 'hidden',
 };
 exports.Image = (0, react_1.forwardRef)((props, ref) => {
-    const { placeholder, blurDataURL, onLoadingComplete, priority, ...restProps } = props;
+    const { placeholder, blurDataURL, onLoadingComplete, onError, priority, ...restProps } = props;
     const [isLoaded, setIsLoaded] = (0, react_1.useState)(false);
+    const [useDirectSrc, setUseDirectSrc] = (0, react_1.useState)(false);
     // Combine refs
     const setRefs = (0, react_1.useCallback)((node) => {
         if (node && node.complete && node.naturalWidth > 0) {
@@ -50,19 +51,31 @@ exports.Image = (0, react_1.forwardRef)((props, ref) => {
             });
         }
     }, [onLoadingComplete]);
+    const handleError = (0, react_1.useCallback)((event) => {
+        if (!useDirectSrc) {
+            // If optimizer endpoint fails (common on static hosts), fall back to raw src.
+            setUseDirectSrc(true);
+        }
+        if (typeof onError === 'function') {
+            onError(event);
+        }
+    }, [onError, useDirectSrc]);
     // Get processed img props
-    const imgProps = (0, get_img_props_1.getImgProps)({ ...restProps, priority }, image_config_1.imageConfigDefault, image_loader_1.defaultLoader);
+    const imgProps = (0, get_img_props_1.getImgProps)({ ...restProps, priority, unoptimized: useDirectSrc || restProps.unoptimized }, image_config_1.imageConfigDefault, image_loader_1.defaultLoader);
+    const fallbackSrc = String(restProps.src || '');
+    const effectiveSrc = useDirectSrc ? fallbackSrc : imgProps.src;
+    const effectiveSrcSet = useDirectSrc ? undefined : imgProps.srcSet;
     // Determine if we should show blur placeholder
     const showBlur = placeholder === 'blur' && blurDataURL && !isLoaded;
     const needsWrapper = showBlur;
     // Render image element
-    const imageElement = ((0, jsx_runtime_1.jsx)("img", { ...imgProps, ref: setRefs, onLoad: handleLoad, style: {
+    const imageElement = ((0, jsx_runtime_1.jsx)("img", { ...imgProps, ref: setRefs, onLoad: handleLoad, onError: handleError, style: {
             ...imgProps.style,
             ...(showBlur ? {
                 opacity: isLoaded ? 1 : 0,
                 transition: 'opacity 0.5s ease-in-out'
             } : {}),
-        }, src: imgProps.src, srcSet: imgProps.srcSet, decoding: priority ? 'sync' : 'async', fetchPriority: priority ? 'high' : undefined }));
+        }, src: effectiveSrc, srcSet: effectiveSrcSet, decoding: priority ? 'sync' : 'async', fetchPriority: priority ? 'high' : undefined }));
     // Wrap with blur placeholder if needed
     if (needsWrapper) {
         return ((0, jsx_runtime_1.jsxs)("span", { style: {
