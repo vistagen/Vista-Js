@@ -10,6 +10,7 @@
 
 import path from 'path';
 import fs from 'fs';
+import { ChildProcessWithoutNullStreams, spawn } from 'child_process';
 import type { RouteEntry, ServerManifest } from '../build/rsc/server-manifest';
 import { BUILD_DIR, STATIC_CHUNKS_PATH, HYDRATE_DOCUMENT_FLAG } from '../constants';
 import {
@@ -154,6 +155,11 @@ export interface StaticGeneratorResult {
   failedPaths: Array<{ path: string; error: string }>;
   /** The prerender manifest */
   manifest: PrerenderManifest;
+}
+
+interface StaticFlightUpstream {
+  fetchFlight: (urlPath: string) => Promise<string | undefined>;
+  close: () => Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -426,6 +432,148 @@ function getChunkScripts(cwd: string): string {
   }
 }
 
+function resolveUpstreamScriptPath(): string | null {
+  const jsPath = path.join(__dirname, 'rsc-upstream.js');
+  if (fs.existsSync(jsPath)) {
+    return jsPath;
+  }
+
+  const tsPath = path.join(__dirname, 'rsc-upstream.ts');
+  if (fs.existsSync(tsPath)) {
+    return tsPath;
+  }
+
+  return null;
+}
+
+function waitForUpstreamReady(
+  child: ChildProcessWithoutNullStreams,
+  timeoutMs: number
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let logs = '';
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(
+        new Error(
+          `[vista:ssg] Timed out waiting for RSC upstream readiness (${timeoutMs}ms)\n${logs}`
+        )
+      );
+    }, timeoutMs);
+
+    const cleanup = () => {
+      clearTimeout(timer);
+      child.stdout.removeListener('data', onData);
+      child.stderr.removeListener('data', onData);
+      child.removeListener('exit', onExit);
+      child.removeListener('error', onError);
+    };
+
+    const onData = (chunk: Buffer | string) => {
+      logs += chunk.toString();
+      if (logs.includes('Listening on')) {
+        cleanup();
+        resolve();
+      }
+    };
+
+    const onExit = (code: number | null) => {
+      cleanup();
+      reject(
+        new Error(
+          `[vista:ssg] RSC upstream exited before readiness (code: ${code ?? 'unknown'})`
+        )
+      );
+    };
+
+    const onError = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+
+    child.stdout.on('data', onData);
+    child.stderr.on('data', onData);
+    child.once('exit', onExit);
+    child.once('error', onError);
+  });
+}
+
+async function startStaticFlightUpstream(cwd: string): Promise<StaticFlightUpstream | null> {
+  const upstreamScript = resolveUpstreamScriptPath();
+  if (!upstreamScript) {
+    return null;
+  }
+
+  const port = Number(process.env.VISTA_STATIC_RSC_PORT || 3181);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    return null;
+  }
+
+  const child = spawn(
+    process.execPath,
+    ['--conditions', 'react-server', upstreamScript, '--port', String(port)],
+    {
+      cwd,
+      env: {
+        ...process.env,
+        NODE_ENV: process.env.NODE_ENV || 'production',
+        RSC_UPSTREAM_PORT: String(port),
+      },
+      stdio: 'pipe',
+    }
+  );
+
+  await waitForUpstreamReady(child, 12000);
+
+  const close = async () => {
+    if (child.killed) return;
+
+    await new Promise<void>((resolve) => {
+      const timeout = setTimeout(() => {
+        try {
+          child.kill('SIGKILL');
+        } catch {
+          // ignore force-kill failures
+        }
+      }, 2500);
+
+      child.once('exit', () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+
+      try {
+        child.kill();
+      } catch {
+        clearTimeout(timeout);
+        resolve();
+      }
+    });
+  };
+
+  return {
+    async fetchFlight(urlPath: string): Promise<string | undefined> {
+      const normalizedPath = urlPath === '/' ? '' : urlPath;
+      const flightUrl = `http://127.0.0.1:${port}/rsc${normalizedPath}`;
+
+      try {
+        const response = await fetch(flightUrl, {
+          headers: { Accept: 'text/x-component' },
+        });
+
+        if (!response.ok) {
+          return undefined;
+        }
+
+        return await response.text();
+      } catch {
+        return undefined;
+      }
+    },
+    close,
+  };
+}
+
 function wrapInDocument(bodyHtml: string, _urlPath: string, metadataHtml: string, cwd: string): string {
   const headInjection = `\n  <meta charset="utf-8" />\n  <meta name="viewport" content="width=device-width, initial-scale=1" />\n  ${metadataHtml}\n  ${getCSSLinks(cwd)}`;
   const scripts = getChunkScripts(cwd);
@@ -486,35 +634,30 @@ export async function generateStaticPages(
   );
 
   console.log(`[vista:ssg] Found ${staticRoutes.length} routes eligible for static generation`);
+  let flightUpstream: StaticFlightUpstream | null = null;
+  try {
+    flightUpstream = await startStaticFlightUpstream(cwd);
+  } catch (flightError) {
+    console.warn(
+      `[vista:ssg] Flight payload pre-generation disabled: ${(flightError as Error).message}`
+    );
+  }
 
-  for (const route of staticRoutes) {
-    if (route.type === 'static') {
-      // Simple static route — single URL
-      const urlPath = route.pattern;
-      const page = await prerenderPage(urlPath, route, undefined, cwd);
-
-      if (page) {
-        setCachedPage(urlPath, page);
-        writeStaticPageToDisk(vistaDirRoot, urlPath, page);
-        result.generatedPaths.push(urlPath);
-        result.pagesGenerated++;
-      } else {
-        result.failedPaths.push({ path: urlPath, error: 'Prerender returned null' });
-      }
-    } else if (route.hasGenerateStaticParams) {
-      // Dynamic route with generateStaticParams — expand to concrete URLs
-      const paramSets = await resolveStaticParams(route, cwd);
-
-      if (paramSets.length === 0) {
-        console.log(`[vista:ssg] No static params for ${route.pattern} — will render on demand`);
-        continue;
-      }
-
-      for (const params of paramSets) {
-        const urlPath = expandPattern(route.pattern, params);
-        const page = await prerenderPage(urlPath, route, params, cwd);
+  try {
+    for (const route of staticRoutes) {
+      if (route.type === 'static') {
+        // Simple static route — single URL
+        const urlPath = route.pattern;
+        const page = await prerenderPage(urlPath, route, undefined, cwd);
 
         if (page) {
+          if (flightUpstream) {
+            const flightData = await flightUpstream.fetchFlight(urlPath);
+            if (flightData) {
+              page.flightData = flightData;
+            }
+          }
+
           setCachedPage(urlPath, page);
           writeStaticPageToDisk(vistaDirRoot, urlPath, page);
           result.generatedPaths.push(urlPath);
@@ -522,7 +665,40 @@ export async function generateStaticPages(
         } else {
           result.failedPaths.push({ path: urlPath, error: 'Prerender returned null' });
         }
+      } else if (route.hasGenerateStaticParams) {
+        // Dynamic route with generateStaticParams — expand to concrete URLs
+        const paramSets = await resolveStaticParams(route, cwd);
+
+        if (paramSets.length === 0) {
+          console.log(`[vista:ssg] No static params for ${route.pattern} — will render on demand`);
+          continue;
+        }
+
+        for (const params of paramSets) {
+          const urlPath = expandPattern(route.pattern, params);
+          const page = await prerenderPage(urlPath, route, params, cwd);
+
+          if (page) {
+            if (flightUpstream) {
+              const flightData = await flightUpstream.fetchFlight(urlPath);
+              if (flightData) {
+                page.flightData = flightData;
+              }
+            }
+
+            setCachedPage(urlPath, page);
+            writeStaticPageToDisk(vistaDirRoot, urlPath, page);
+            result.generatedPaths.push(urlPath);
+            result.pagesGenerated++;
+          } else {
+            result.failedPaths.push({ path: urlPath, error: 'Prerender returned null' });
+          }
+        }
       }
+    }
+  } finally {
+    if (flightUpstream) {
+      await flightUpstream.close();
     }
   }
 
