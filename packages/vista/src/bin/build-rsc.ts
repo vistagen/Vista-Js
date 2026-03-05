@@ -164,11 +164,25 @@ function reportDevRuntimeError(title: string, error: unknown): void {
   var indicator = (window as any).__VISTA_DEVTOOLS_INDICATOR__;
   var overlay = (window as any).__VISTA_DEV_ERROR_OVERLAY__;
   var message = buildRuntimeMessage(title, error);
+  var canRestoreFromIndicator = false;
+  if (indicator && indicator.hidden !== true && typeof indicator.setError === 'function') {
+    canRestoreFromIndicator = true;
+    if (typeof indicator.ensureAttached === 'function') {
+      try {
+        canRestoreFromIndicator = indicator.ensureAttached() !== false;
+      } catch {
+        canRestoreFromIndicator = false;
+      }
+    }
+  }
   if (indicator && typeof indicator.setError === 'function') {
     indicator.setError(title, 1);
   }
   if (overlay && typeof overlay.capture === 'function') {
     overlay.capture([message]);
+    if (!canRestoreFromIndicator && typeof overlay.show === 'function') {
+      overlay.show([message]);
+    }
     return;
   }
   if (overlay && typeof overlay.show === 'function') {

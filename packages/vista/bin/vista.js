@@ -3,6 +3,14 @@
 const command = process.argv[2];
 const flags = process.argv.slice(3);
 
+function forceRuntimeEnv(mode) {
+  if (mode === 'development') {
+    process.env.NODE_ENV = 'development';
+    return;
+  }
+  process.env.NODE_ENV = 'production';
+}
+
 if (command === 'g' || command === 'generate') {
   const { runGenerateCommand } = require('../dist/bin/generate');
   runGenerateCommand(flags).then((code) => {
@@ -21,6 +29,7 @@ const { markStartTime } = require('../dist/server/logger');
 markStartTime();
 
 if (command === 'dev') {
+  forceRuntimeEnv('development');
   if (useRSC) {
     // RSC Mode (default) - True React Server Components Architecture
     const { buildRSC } = require('../dist/bin/build-rsc');
@@ -52,6 +61,7 @@ if (command === 'dev') {
       });
   }
 } else if (command === 'build') {
+  forceRuntimeEnv('production');
   if (useRSC) {
     // RSC Production Build (default)
     const { buildRSC } = require('../dist/bin/build-rsc');
@@ -79,6 +89,7 @@ if (command === 'dev') {
       });
   }
 } else if (command === 'start') {
+  forceRuntimeEnv('production');
   if (useRSC) {
     const { startRSCServer } = require('../dist/server/rsc-engine');
     startRSCServer({ port: process.env.PORT || 3003 });
