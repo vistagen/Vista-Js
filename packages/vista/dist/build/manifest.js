@@ -54,7 +54,7 @@ function getBuildId(vistaDir, forceNew = false) {
 }
 /**
  * Create the .vista directory structure.
- * In legacy mode, only creates root + cache (no empty server/static dirs).
+ * In legacy mode, only creates root (no empty server/static dirs).
  * In RSC mode, creates the full structure for server/client bundles.
  */
 function createVistaDirectories(cwd, mode = 'legacy') {
@@ -71,8 +71,10 @@ function createVistaDirectories(cwd, mode = 'legacy') {
     // Always create root
     fs_1.default.mkdirSync(root, { recursive: true });
     if (mode === 'rsc') {
-        // RSC mode: create full directory tree
-        Object.values(dirs).forEach((dir) => {
+        // RSC mode: create only currently-used directories.
+        // Keep css/media paths reserved in `dirs` for future use, but do not
+        // create empty folders unless the build actually emits files there.
+        [dirs.root, dirs.cache, dirs.server, dirs.static, dirs.chunks].forEach((dir) => {
             fs_1.default.mkdirSync(dir, { recursive: true });
         });
         // Cache subdirectories

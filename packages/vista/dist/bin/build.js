@@ -17,6 +17,7 @@ const structure_validator_1 = require("../server/structure-validator");
 const structure_log_1 = require("../server/structure-log");
 const devtools_indicator_snippet_1 = require("./devtools-indicator-snippet");
 const dev_error_overlay_snippet_1 = require("./dev-error-overlay-snippet");
+const deploy_output_1 = require("./deploy-output");
 const _debug = !!process.env.VISTA_DEBUG;
 // Helper to run PostCSS
 function runPostCSS(cwd, vistaDir) {
@@ -418,6 +419,11 @@ async function buildClient(watch = false, onRebuild) {
                 console.log(stats?.toString('minimal'));
                 // Build CSS
                 runPostCSS(cwd, vistaDir);
+                (0, deploy_output_1.generateDeploymentOutputs)({
+                    cwd,
+                    vistaDir,
+                    debug: _debug,
+                });
                 compiler.close((closeErr) => {
                     if (closeErr)
                         console.error('Error closing compiler:', closeErr);

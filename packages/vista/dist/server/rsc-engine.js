@@ -844,12 +844,14 @@ function startRSCServer(options = {}) {
     }
     let serverManifest = JSON.parse(fs_1.default.readFileSync(serverManifestPath, 'utf-8'));
     // ========================================================================
-    // Load pre-rendered static pages from disk into in-memory cache
+    // Load pre-rendered static pages from disk into in-memory cache (production)
     // ========================================================================
     const vistaDirRoot = path_1.default.join(cwd, constants_1.BUILD_DIR);
-    const loadedStaticPages = (0, static_cache_1.loadStaticPagesFromDisk)(vistaDirRoot);
-    if (loadedStaticPages > 0) {
-        (0, logger_1.logInfo)(`Loaded ${loadedStaticPages} pre-rendered page(s) from cache`);
+    if (!isDev) {
+        const loadedStaticPages = (0, static_cache_1.loadStaticPagesFromDisk)(vistaDirRoot);
+        if (loadedStaticPages > 0) {
+            (0, logger_1.logInfo)(`Loaded ${loadedStaticPages} pre-rendered page(s) from cache`);
+        }
     }
     const upstreamChild = spawnUpstream(cwd, upstreamPort);
     upstreamChild.stdout.setEncoding('utf8');
@@ -1254,7 +1256,7 @@ function startRSCServer(options = {}) {
         // For ISR pages whose revalidate window has expired, serve the stale
         // cached version immediately and kick off background revalidation.
         // ==================================================================
-        {
+        if (!isDev) {
             const cached = (0, static_cache_1.getCachedPage)(req.path);
             if (cached.page) {
                 if (cached.stale) {

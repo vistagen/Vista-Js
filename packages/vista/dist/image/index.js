@@ -27,12 +27,11 @@ const wrapperStyle = {
 exports.Image = (0, react_1.forwardRef)((props, ref) => {
     const { placeholder, blurDataURL, onLoadingComplete, priority, ...restProps } = props;
     const [isLoaded, setIsLoaded] = (0, react_1.useState)(false);
-    const [isInView, setIsInView] = (0, react_1.useState)(priority || false);
-    const imgRef = (0, react_1.useRef)(null);
-    const observerRef = (0, react_1.useRef)(null);
     // Combine refs
     const setRefs = (0, react_1.useCallback)((node) => {
-        imgRef.current = node;
+        if (node && node.complete && node.naturalWidth > 0) {
+            setIsLoaded(true);
+        }
         if (typeof ref === 'function') {
             ref(node);
         }
@@ -40,31 +39,6 @@ exports.Image = (0, react_1.forwardRef)((props, ref) => {
             ref.current = node;
         }
     }, [ref]);
-    // IntersectionObserver for lazy loading
-    (0, react_1.useEffect)(() => {
-        if (priority) {
-            setIsInView(true);
-            return;
-        }
-        const element = imgRef.current;
-        if (!element)
-            return;
-        observerRef.current = new IntersectionObserver((entries) => {
-            entries.forEach((entry) => {
-                if (entry.isIntersecting) {
-                    setIsInView(true);
-                    observerRef.current?.disconnect();
-                }
-            });
-        }, {
-            rootMargin: '200px', // Start loading 200px before viewport
-            threshold: 0,
-        });
-        observerRef.current.observe(element);
-        return () => {
-            observerRef.current?.disconnect();
-        };
-    }, [priority]);
     // Handle image load complete
     const handleLoad = (0, react_1.useCallback)((event) => {
         const img = event.currentTarget;
@@ -88,9 +62,7 @@ exports.Image = (0, react_1.forwardRef)((props, ref) => {
                 opacity: isLoaded ? 1 : 0,
                 transition: 'opacity 0.5s ease-in-out'
             } : {}),
-        }, 
-        // Only set src when in view (lazy loading)
-        src: isInView ? imgProps.src : undefined, srcSet: isInView ? imgProps.srcSet : undefined, decoding: priority ? 'sync' : 'async', fetchPriority: priority ? 'high' : undefined }));
+        }, src: imgProps.src, srcSet: imgProps.srcSet, decoding: priority ? 'sync' : 'async', fetchPriority: priority ? 'high' : undefined }));
     // Wrap with blur placeholder if needed
     if (needsWrapper) {
         return ((0, jsx_runtime_1.jsxs)("span", { style: {

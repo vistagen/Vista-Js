@@ -1,6 +1,6 @@
 'use client';
 
-import React, { forwardRef, useState, useEffect, useRef, useCallback } from 'react';
+import React, { forwardRef, useState, useCallback } from 'react';
 import { getImgProps, ImageProps, PlaceholderValue } from './get-img-props';
 import { imageConfigDefault } from './image-config';
 import { defaultLoader } from './image-loader';
@@ -38,51 +38,18 @@ export const Image = forwardRef<HTMLImageElement, EnhancedImageProps>((props, re
     } = props;
 
     const [isLoaded, setIsLoaded] = useState(false);
-    const [isInView, setIsInView] = useState(priority || false);
-    const imgRef = useRef<HTMLImageElement | null>(null);
-    const observerRef = useRef<IntersectionObserver | null>(null);
 
     // Combine refs
     const setRefs = useCallback((node: HTMLImageElement | null) => {
-        imgRef.current = node;
+        if (node && node.complete && node.naturalWidth > 0) {
+            setIsLoaded(true);
+        }
         if (typeof ref === 'function') {
             ref(node);
         } else if (ref) {
             (ref as React.MutableRefObject<HTMLImageElement | null>).current = node;
         }
     }, [ref]);
-
-    // IntersectionObserver for lazy loading
-    useEffect(() => {
-        if (priority) {
-            setIsInView(true);
-            return;
-        }
-
-        const element = imgRef.current;
-        if (!element) return;
-
-        observerRef.current = new IntersectionObserver(
-            (entries) => {
-                entries.forEach((entry) => {
-                    if (entry.isIntersecting) {
-                        setIsInView(true);
-                        observerRef.current?.disconnect();
-                    }
-                });
-            },
-            {
-                rootMargin: '200px', // Start loading 200px before viewport
-                threshold: 0,
-            }
-        );
-
-        observerRef.current.observe(element);
-
-        return () => {
-            observerRef.current?.disconnect();
-        };
-    }, [priority]);
 
     // Handle image load complete
     const handleLoad = useCallback((event: React.SyntheticEvent<HTMLImageElement>) => {
@@ -121,9 +88,8 @@ export const Image = forwardRef<HTMLImageElement, EnhancedImageProps>((props, re
                     transition: 'opacity 0.5s ease-in-out'
                 } : {}),
             }}
-            // Only set src when in view (lazy loading)
-            src={isInView ? imgProps.src : undefined}
-            srcSet={isInView ? imgProps.srcSet : undefined}
+            src={imgProps.src}
+            srcSet={imgProps.srcSet}
             decoding={priority ? 'sync' : 'async'}
             fetchPriority={priority ? 'high' : undefined}
         />

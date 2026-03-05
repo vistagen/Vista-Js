@@ -1,3 +1,5 @@
+import Image from 'vista/image';
+
 interface SignatureBlockProps {
   quote?: string;
 }
@@ -12,7 +14,7 @@ export default function SignatureBlock({ quote = DEFAULT_QUOTE }: SignatureBlock
       <p className="mt-4 max-w-2xl text-lg leading-8 text-zinc-300">"{quote}"</p>
 
       <div className="mt-8 flex flex-col items-start">
-        <img
+        <Image
           src="/signature.svg"
           alt="Ankan Dalui Signature"
           width={320}
